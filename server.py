@@ -307,7 +307,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/summary":
             return self.api_summary()
         if path == "/api/analytics":
-            return self.api_analytics()
+            return self.api_analytics(q)
+        if path == "/api/seasons":
+            return self.api_seasons()
         if path == "/api/auth/me":
             return self.api_me()
         if path == "/api/leaderboard":
@@ -634,9 +636,16 @@ class Handler(BaseHTTPRequestHandler):
                 {"error": "Insufficient virtual balance.",
                  "needed": qd["cost_basis"], "balance": acct["balance"]}, 400)
 
+        # the human-readable outcome the user actually backed (e.g. a team /
+        # candidate name for "yes", or "No" for the no side of a threshold market)
+        if side == "yes":
+            outcome_name = m.get("yes_sub_title") or m["title"]
+        else:
+            outcome_name = m.get("no_sub_title") or "No"
         bet_id = db.insert_bet(uid, {
             "ticker": ticker, "event_ticker": m["event_ticker"],
-            "title": m["title"], "side": side, "contracts": qd["contracts"],
+            "title": m["title"], "outcome_name": outcome_name,
+            "side": side, "contracts": qd["contracts"],
             "avg_price": qd["avg_price"], "stake": qd["stake"], "fee": qd["fee"],
             "cost_basis": qd["cost_basis"], "partial": qd["partial"],
             "estimated_fill": qd["estimated_fill"], "close_time": m["close_time"],
@@ -647,7 +656,11 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": True, "bet": db.get_bet(bet_id), "quote": qd})
 
     def api_list_bets(self):
-        bets = db.list_bets(self._uid())
+        # the active portfolio is the current season only (past resets live in
+        # the stats season picker); voided positions are hidden
+        uid = self._uid()
+        bets = [b for b in db.list_bets(uid, season=db.current_season(uid))
+                if b["status"] != "void"]
         out = [enrich_open_bet(b) if b["status"] == "open" else b for b in bets]
         self._send_json({"bets": out})
 
@@ -737,7 +750,10 @@ class Handler(BaseHTTPRequestHandler):
                          "potential_payout": round(stake * combined, 2)})
 
     def api_list_parlays(self):
-        self._send_json({"parlays": db.list_parlays(self._uid())})
+        uid = self._uid()
+        parlays = [p for p in db.list_parlays(uid, season=db.current_season(uid))
+                   if p["status"] != "void"]
+        self._send_json({"parlays": parlays})
 
     def api_force_settle_parlay(self, pid, body):
         uid = self._uid()
@@ -978,6 +994,7 @@ class Handler(BaseHTTPRequestHandler):
         return {
             "id": b["id"], "handle": b.get("handle"), "ticker": b["ticker"],
             "event_ticker": b.get("event_ticker"), "title": b["title"],
+            "outcome_name": b.get("outcome_name"),
             "side": b["side"], "stake": round(b.get("stake") or 0, 2),
             "avg_price": price, "mult": (1.0 / price) if price else None,
             "status": b["status"], "result": b.get("result"),
@@ -1070,6 +1087,7 @@ class Handler(BaseHTTPRequestHandler):
             out.append({
                 "id": r["id"], "handle": r.get("handle") or "anonymous",
                 "body": r["body"], "created_at": r["created_at"],
+                "game_state": r.get("game_state"),
                 "likes": counts.get(cid, 0), "liked": cid in liked,
                 "mine": bool(uid and r["user_id"] == uid),
                 "can_delete": bool(uid and (r["user_id"] == uid or admin)),
@@ -1098,7 +1116,10 @@ class Handler(BaseHTTPRequestHandler):
         # market context (for the global activity feed to label + link)
         ref_ticker = (body.get("ticker") or "").strip()[:64] or None
         ref_title = (body.get("title") or "").strip()[:160] or None
-        cid = db.add_comment(uid, thread, text, ref_ticker, ref_title)
+        # live score / clock captured client-side at post time (a short label like
+        # "PIT 14–10 BAL · 5:23 - 3rd"); display-only context, so just cap it.
+        game_state = (body.get("game") or "").strip()[:80] or None
+        cid = db.add_comment(uid, thread, text, ref_ticker, ref_title, game_state)
         self._send_json({"ok": True, "id": cid})
 
     def api_all_comments(self):
@@ -1115,6 +1136,7 @@ class Handler(BaseHTTPRequestHandler):
                 "id": r["id"], "handle": r.get("handle") or "anonymous",
                 "body": r["body"], "created_at": r["created_at"],
                 "ref_ticker": r.get("ref_ticker"), "ref_title": r.get("ref_title"),
+                "game_state": r.get("game_state"),
                 "likes": counts.get(cid, 0), "liked": cid in liked,
                 "mine": bool(uid and r["user_id"] == uid),
                 "can_delete": bool(uid and (r["user_id"] == uid or admin)),
@@ -1172,20 +1194,57 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"balance": acct["balance"], "starting": acct["starting"],
                          "equity": current_equity(uid)})
 
-    def api_analytics(self):
+    def _season_param(self, q):
+        """Parse ?season= -> current-season int (default), a specific int, or
+        None for 'overall' (all seasons combined)."""
         uid = self._uid()
-        s = analytics.summary(db.list_bets(uid))
+        raw = (q.get("season", [""])[0] or "").strip().lower()
+        if raw in ("all", "overall", "*"):
+            return uid, None
+        if raw.isdigit():
+            return uid, int(raw)
+        return uid, db.current_season(uid)   # default: just the active period
+
+    def api_analytics(self, q):
+        uid, season = self._season_param(q)
+        # voided positions (cancelled at a reset) are neither win nor loss -> drop
+        bets = [b for b in db.list_bets(uid, season=season) if b["status"] != "void"]
+        s = analytics.summary(bets)
         # fold settled-parlay P&L into the headline totals (reality check)
-        settled_p = [p for p in db.list_parlays(uid) if p["status"] == "settled"]
+        settled_p = [p for p in db.list_parlays(uid, season=season)
+                     if p["status"] == "settled"]
         if settled_p:
             s["realized_pnl"] = round(s["realized_pnl"] +
                 sum((p.get("realized_pnl") or 0.0) for p in settled_p), 2)
             s["invested"] = round(s["invested"] +
                 sum(p["cost_basis"] for p in settled_p), 2)
             s["roi"] = round(s["realized_pnl"] / s["invested"], 4) if s["invested"] > 0 else None
-        s["equity_history"] = db.equity_history(uid)
+        s["equity_history"] = db.equity_history(uid, season=season)
         s["account"] = db.get_account(uid)
+        s["season"] = season            # null => overall
+        s["current_season"] = db.current_season(uid)
         self._send_json(s)
+
+    def api_seasons(self):
+        """List the user's reset periods with a quick net-P&L per period so the
+        stats view can offer a season picker (current / previous / overall)."""
+        uid = self._uid()
+        cur = db.current_season(uid)
+        out = []
+        for s in db.list_seasons(uid):
+            sn = s["season"]
+            bets = [b for b in db.list_bets(uid, season=sn) if b["status"] != "void"]
+            settled = [b for b in bets if b.get("status") in ("settled", "closed")]
+            net = sum((b.get("realized_pnl") or 0.0) for b in settled)
+            net += sum((p.get("realized_pnl") or 0.0)
+                       for p in db.list_parlays(uid, season=sn)
+                       if p["status"] == "settled")
+            out.append({
+                "season": sn, "started_at": s.get("started_at"),
+                "ended_at": s.get("ended_at"), "is_current": sn == cur,
+                "n_bets": len(bets), "net": round(net, 2),
+            })
+        self._send_json({"current": cur, "seasons": out})
 
 
 class Server(ThreadingHTTPServer):

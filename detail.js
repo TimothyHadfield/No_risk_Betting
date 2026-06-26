@@ -1162,6 +1162,20 @@
     }
   }
 
+  // Compact live score/clock label, captured when a user posts a comment so the
+  // discussion can show what the game looked like at that moment. Null unless a
+  // matched game is actually in progress with a known score.
+  function gameTag() {
+    const g = S && S.game;
+    if (!g || !g.matched || g.state !== "in") return null;
+    const a = g.away || {}, h = g.home || {};
+    if (a.score == null || h.score == null) return null;
+    const an = a.abbr || a.name || "", hn = h.abbr || h.name || "";
+    const score = `${an} ${a.score}–${h.score} ${hn}`.trim();
+    const clock = (g.detail || "").trim();
+    return clock ? `${score} · ${clock}` : score;
+  }
+
   function renderScore() {
     const host = document.getElementById("d-score");
     if (!host) return;
@@ -1393,7 +1407,7 @@
           const title = (S.event_title) || (S.market && S.market.title) || S.ticker;
           const leftCol = container.querySelector(".detail-main") || container;
           NRB.social.mountThread(leftCol, "mkt:" + eventTicker(),
-            { ticker: S.ticker, title: title });
+            { ticker: S.ticker, title: title, gameState: gameTag });
         } catch (e) {}
       }
     },

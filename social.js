@@ -16,8 +16,9 @@
 
   // ---- a public bet card (feed + profile) ---------------------------------
   function betCard(b) {
-    const outcome = b.title || b.ticker;
-    const sideTxt = b.side === "no" ? "No" : "Yes";
+    const market = b.title || b.ticker;
+    // the actual outcome the user backed (team / candidate / "No"), not just Yes/No
+    const pick = b.outcome_name || (b.side === "no" ? "No" : "Yes");
     let res = "";
     if (b.status === "settled") {
       const won = b.result === b.side;
@@ -34,8 +35,8 @@
         <span class="muted so-ago">${fmt.timeAgo(b.placed_at)}</span>
       </div>
       <div class="so-bet-mid">
-        <span class="badge ${b.side === "no" ? "no" : "yes"}">${sideTxt}</span>
-        <a class="so-mkt" data-ticker="${fmt.esc(b.ticker)}">${fmt.esc(outcome)}</a>
+        <span class="badge ${b.side === "no" ? "no" : "yes"}">${fmt.esc(pick)}</span>
+        <a class="so-mkt" data-ticker="${fmt.esc(b.ticker)}">${fmt.esc(market)}</a>
       </div>
       <div class="so-bet-foot">
         <span class="tnum">${fmt.usd(b.stake)} @ ${odds.multStr(b.avg_price)}</span>
@@ -110,9 +111,10 @@
       const body = (input.value || "").trim();
       if (!body) return;
       post.disabled = true;
+      const game = (typeof ctx.gameState === "function") ? ctx.gameState() : null;
       try {
         const r = await NRB.api("/api/comments", { method: "POST",
-          body: { thread, body, ticker: ctx.ticker, title: ctx.title } });
+          body: { thread, body, ticker: ctx.ticker, title: ctx.title, game } });
         if (r && r.ok) { input.value = ""; loadComments(wrap, thread); }
         else NRB.toast((r && r.error) || "Couldn't post.");
       } catch (e) { NRB.toast("Couldn't post."); }
@@ -143,6 +145,7 @@
         ${handleLink(c.handle)}
         <span class="muted so-ago">${fmt.timeAgo(c.created_at)}</span>
       </div>
+      ${c.game_state ? `<div class="so-gtag" title="Live score when posted">${fmt.esc(c.game_state)}</div>` : ""}
       <div class="so-comment-body">${fmt.esc(c.body)}</div>
       <div class="so-comment-foot">
         <button class="so-like ${c.liked ? "on" : ""}" data-type="comment" data-id="${c.id}">▲ <span class="so-like-n">${c.likes || 0}</span></button>
@@ -169,8 +172,13 @@
   }
 
   // ---- Community view (profile editor + leaderboard + feed) ---------------
+  // While the community is small we mix every bet + comment into one chronological
+  // "Live" feed (separate All-bets / All-comments tabs only kick in past this many
+  // total posts, when the firehose is worth splitting).
+  const LIVE_THRESHOLD = 25;
+
   NRB.views.community = {
-    tab: "leaderboard",
+    tab: null,
     async mount(container) {
       container.innerHTML = `
         <div class="so-page">
@@ -179,16 +187,34 @@
             <p class="muted">See who's actually calling it right — and join the conversation.</p>
           </div>
           <div id="so-profile-card"></div>
-          <div class="so-tabs">
-            <button class="so-tab" data-tab="leaderboard">Leaderboard</button>
-            <button class="so-tab" data-tab="feed">All bets</button>
-            <button class="so-tab" data-tab="comments">All comments</button>
-          </div>
-          <div id="so-tabbody"></div>
+          <div class="so-tabs" id="so-tabs"></div>
+          <div id="so-tabbody"><div class="skeleton" style="height:200px"></div></div>
         </div>`;
-      container.querySelectorAll(".so-tab").forEach((t) =>
-        t.addEventListener("click", () => { this.tab = t.dataset.tab; this.renderTabs(container); }));
       this.renderProfileCard(container);
+
+      // Pull the global activity once to size the UI (and feed the combined view).
+      let bets = [], comments = [];
+      try {
+        const [f, c] = await Promise.all([
+          NRB.api("/api/feed").catch(() => ({ bets: [] })),
+          NRB.api("/api/comments/all").catch(() => ({ comments: [] })),
+        ]);
+        bets = (f && f.bets) || [];
+        comments = (c && c.comments) || [];
+      } catch (e) { /* fall through with empties */ }
+      this._cache = { bets, comments };
+
+      const lowVolume = bets.length + comments.length <= LIVE_THRESHOLD;
+      const tabs = lowVolume
+        ? [["live", "Live"], ["leaderboard", "Leaderboard"]]
+        : [["leaderboard", "Leaderboard"], ["feed", "All bets"], ["comments", "All comments"]];
+      if (!this.tab || !tabs.some((t) => t[0] === this.tab)) this.tab = tabs[0][0];
+
+      const bar = container.querySelector("#so-tabs");
+      bar.innerHTML = tabs.map(([k, label]) =>
+        `<button class="so-tab" data-tab="${k}">${label}</button>`).join("");
+      bar.querySelectorAll(".so-tab").forEach((t) =>
+        t.addEventListener("click", () => { this.tab = t.dataset.tab; this.renderTabs(container); }));
       this.renderTabs(container);
     },
 
@@ -196,7 +222,8 @@
       container.querySelectorAll(".so-tab").forEach((t) =>
         t.classList.toggle("active", t.dataset.tab === this.tab));
       const body = container.querySelector("#so-tabbody");
-      if (this.tab === "feed") loadFeed(body);
+      if (this.tab === "live") renderLive(body, this._cache || { bets: [], comments: [] });
+      else if (this.tab === "feed") loadFeed(body);
       else if (this.tab === "comments") loadAllComments(body);
       else loadLeaderboard(body);
     },
@@ -272,6 +299,24 @@
     render();
   }
 
+  // Combined chronological feed of bets + comments (small-community "Live" view).
+  function renderLive(body, cache) {
+    const items = [];
+    (cache.bets || []).forEach((b) =>
+      items.push({ t: b.placed_at || 0, kind: "bet", data: b }));
+    (cache.comments || []).forEach((c) =>
+      items.push({ t: c.created_at || 0, kind: "comment", data: c }));
+    items.sort((a, b) => b.t - a.t);
+    if (!items.length) {
+      body.innerHTML = `<div class="card so-empty-card"><p class="muted">No activity yet. Place a bet, or open a market and start the discussion.</p></div>`;
+      return;
+    }
+    body.innerHTML = `<div class="so-feed"></div>`;
+    const feed = body.querySelector(".so-feed");
+    items.forEach((it) =>
+      feed.appendChild(it.kind === "bet" ? betCard(it.data) : globalCommentCard(it.data)));
+  }
+
   async function loadFeed(body) {
     body.innerHTML = `<div class="skeleton" style="height:200px"></div>`;
     let data;
@@ -312,6 +357,7 @@
         ${handleLink(c.handle)}
         <span class="muted so-ago">${fmt.timeAgo(c.created_at)}</span>
       </div>
+      ${c.game_state ? `<div class="so-gtag" title="Live score when posted">${fmt.esc(c.game_state)}</div>` : ""}
       <div class="so-gc-body">${fmt.esc(c.body)}</div>
       <div class="so-bet-foot">
         ${onMkt}

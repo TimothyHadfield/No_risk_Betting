@@ -40,7 +40,8 @@ Working dir: `c:/Users/timha/OneDrive/Desktop/my-website/Code Projects/No_risk_B
 - The server binds `0.0.0.0`, so while running it's also reachable by **others on the
   same Wi-Fi** at `<his-ip>:8765`. For strictly-local use: `HOST=127.0.0.1 python server.py`.
 - Bets/balance are in a local **`data.db`** (git-ignored, NOT on GitHub). Each browser is
-  a separate anonymous user (id in localStorage). Burger menu → **Reset** wipes an account.
+  a separate anonymous user (id in localStorage). Burger menu → **Reset balance** starts a
+  new period (back to $1,000) but keeps past bets viewable in stats (it no longer wipes data).
 - Needs **internet** (Kalshi + ESPN). Offline → app shell loads, connection banner shows.
 - The GitHub repo is **public** (no secrets in it, so fine). Push changes via VS Code
   Source Control → Commit → **Sync Changes**.
@@ -98,11 +99,27 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
     `/{id}/report`), `POST /api/reactions`, `POST /api/bets/{id}/public` (toggle hidden).
   - Moderation: per-user/admin delete, reports, tiny slur blocklist, all rate-limited;
     `ADMIN_HANDLES` env lists moderators. `delete_user` cascades to social rows.
-  - Frontend `social.js`/`social.css`: **Community** page = three tabs **Leaderboard /
-    All bets / All comments** (the last two are the global activity views so users
-    don't hunt for them). Public profile view (`NRB.views.user`). A reusable comments
-    thread mounted in the market-detail **left column** under the chart (thread =
-    `mkt:<event_ticker>`, passes ticker/title for the global feed). Like buttons.
+  - Frontend `social.js`/`social.css`: **Community** page. **ADAPTIVE TABS (2026-06-26):**
+    while total public activity (bets + comments) is **≤ 25** the page shows ONE combined
+    chronological **"Live"** feed (bets and comments mixed, newest first; tabs =
+    Live / Leaderboard) — only past that threshold (`LIVE_THRESHOLD`) does it split into
+    the three firehose tabs **Leaderboard / All bets / All comments**. `mount()` fetches
+    `/api/feed` + `/api/comments/all` once to size the UI and feed the combined view;
+    `renderLive()` merges by timestamp (`placed_at`/`created_at`). Public profile view
+    (`NRB.views.user`). A reusable comments thread mounted in the market-detail **left
+    column** under the chart (thread = `mkt:<event_ticker>`, passes ticker/title for the
+    global feed). Like buttons.
+  - **Bet cards show the OUTCOME the user backed (2026-06-26)** — not just the market +
+    amount. Bets store `bets.outcome_name` (the team/candidate for a "yes" bet =
+    `yes_sub_title or title`, or the `no_sub_title or "No"` for a "no"), set at insert and
+    returned in `_bet_card`/`_FEED_COLS`. The feed badge now reads the actual pick
+    (e.g. "Lakers") with the market title as the link.
+  - **Comments capture the live score+clock at post time (2026-06-26)** — `comments.game_state`
+    (a short label like "LAL 88–90 BOS · 4:21 - 4th"). detail.js passes a `gameState()`
+    callback into the thread ctx (`gameTag()` builds it from the live `/api/game` state,
+    only while a matched game is in progress); the composer sends it as `game` on
+    `POST /api/comments`; it renders as a small `.so-gtag` pill under the comment body in
+    both the per-market thread and the global All-comments / Live feeds.
   - **Profile/privacy editing lives in Account settings** (auth modal → "Profile &
     privacy" panel: display name, bio, leaderboard, bets-private). The Community page
     only shows a one-line "Set display name" prompt if you have none yet — no editor box
@@ -146,6 +163,21 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   **MULTI-USER**: every visitor is an anonymous user keyed by a
   browser-generated id sent in the `X-User-Id` header. Tables: accounts, bets,
   parlays, parlay_legs, equity_history — all scoped by user_id. Get-or-create accounts.
+  **SEASONS / RESET PERIODS (added 2026-06-26):** resetting no longer deletes data — it
+  starts a new "season". `accounts.season` is the current period counter; `bets`, `parlays`,
+  `equity_history` each carry a `season` column (default 1, set to the account's current
+  season at insert). A `seasons` table (user_id, season, started_at, ended_at,
+  starting_balance) records each period for labeling; `_ensure_season_row()` back-fills
+  season 1 for pre-existing accounts. `reset_account()` now: voids still-open bets/parlays
+  (status `'void'` = excluded from stats, so nothing leaks into the new balance), stamps
+  the old season's `ended_at`, bumps `accounts.season`, sets balance/starting back to
+  $1,000, and inserts the new season row. `list_bets`/`list_parlays`/`equity_history` take
+  an optional `season=` filter (None = all periods); `current_season()` and `list_seasons()`
+  added. **The reset top-up is NOT profit** — P&L is summed from bet/parlay `realized_pnl`,
+  and the $1,000 reset is not a bet, so it never counts. Portfolio (`/api/bets`,
+  `/api/parlays`) shows the current season only (voids hidden); the social feed stays
+  cross-season (public record). `_migrate()` adds the `season` columns to old DBs; the
+  `seasons` table is created by the idempotent startup DDL.
   **OPTIONAL ACCOUNTS (added 2026-06-26, upgraded same day):** `users`
   (`login` = username OR email [unverified — we never send email], salted
   PBKDF2-SHA256 `pass_hash` + `recovery_hash`, stdlib only) + `sessions`
@@ -159,8 +191,9 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   delete_session, gen_recovery_code. Sign-up ALSO collects a **display name** (public;
   see Social layer). `init()` runs `_migrate()` which idempotently renames the old
   `email` column → `login`, adds recovery/reset columns, and adds the social columns
-  (`bets.hidden`, `profiles.bets_private`, `comments.ref_ticker/ref_title`) — all
-  verified against live Neon.
+  (`bets.hidden`, `bets.outcome_name`, `profiles.bets_private`,
+  `comments.ref_ticker/ref_title`, `comments.game_state`, and the `season` columns on
+  `accounts`/`bets`/`parlays`/`equity_history`) — all verified against live Neon.
 
 ### Frontend (vanilla JS, dark, mobile-first, PWA)
 - `index.html` — app shell: top bar (burger, SVG brand mark, **Markets/Community nav
@@ -174,8 +207,9 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
 - `util.js` — the shared runtime `window.NRB` (STABLE CONTRACT). Provides: `api` (sends
   `X-User-Id`, shows connection banner on failure), `fmt`, `odds` (multiplier = 1/price),
   `icon(name, logo)` (real flag IMAGES via flagcdn since Windows can't render flag
-  emoji; team logos; monogram fallback), `fav` + `history` (localStorage), `box` +
-  `carousel` (shared market-box component), `slip` (parlay bet-slip state), router
+  emoji; team logos; monogram fallback), `fav` + **`favCat`** + **`hiddenCat`** + `history`
+  (localStorage), `box` + `carousel` (shared market-box component), `slip` (parlay bet-slip),
+  router
   (`views`, `go`, `openMarket`), `drawer`, theme toggle, predict-then-bet toggle,
   onboarding, `refreshAccount` (uses light `/api/summary`). **`auth`** (signup/login/
   logout/recover/changePassword/deleteAccount; stores session token in localStorage
@@ -184,7 +218,21 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   Also: **`help`/`glossary`** (the "?" popovers), **`fmt.title`** (strip emoji),
   `updateTopnav` (active nav tab). The auth modal + header account button are wired here.
 - `browse.js`/`browse.css` — Home "For You" feed of horizontal carousels + section bar
-  + search + the **"My Bets" bar** + Watchlist view.
+  + search + the **"My Bets" bar** + Watchlist view. **FAVORITE CATEGORIES (2026-06-26):**
+  every carousel header (leagues + categories, not "For You") has a ☆/★ star; starring a
+  category floats it (and its section-bar chip) to the **top of the feed**, just under
+  "For You". Stored client-side in localStorage (`nrb_fav_cats`) via **`NRB.favCat`** (mirrors
+  `NRB.fav`); `NRB.carousel(title, events, {favKey})` renders/wires the star. browse.js
+  `reorderRows()` does the float and `_renderRows()` re-runs live on `favCat.onChange` (no
+  refetch) so the order updates the instant you toggle a star.
+  **HIDE CATEGORIES (2026-06-26):** each carousel header also has a ✕ that **removes that
+  category from the home feed** (still searchable, still re-addable). Stored in localStorage
+  (`nrb_hidden_cats`) via **`NRB.hiddenCat`** (`list/has/add/remove/onChange`); `_renderRows()`
+  filters hidden keys out (and re-runs on `hiddenCat.onChange`). A **"+" button pinned to the
+  far right of the section bar** (`#cat-add` in index.html, inside the new `.sectionbar-row`
+  flex wrapper; shown only on the browse view) opens a **popover (`.cat-panel`) listing hidden
+  categories**, each clicking to re-add. "For You" has no star/✕ (favKey null). Hidden wins
+  over favorited (a hidden+favorited category stays out until re-added, then floats back up).
 - `detail.js`/`detail.css` — the market detail view (the biggest file). Multi-line
   price chart (one line per outcome, **all resampled onto a shared timeline** so hover
   dots align), time-range pills + a "Game" in-game range, live score/clock, two/N
@@ -197,14 +245,19 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   **Parlays** section.
 - `profile.js`/(uses) — "Forecasting Score" page: Brier hero, reality-check, W/L streak,
   calibration chart, skill-by-category, equity chart, **You-vs-Market** (predict) section.
-- `analytics.js` — charts view (calibration + equity).
+  Has a **season picker** at the top (`NRB.seasonPicker`) — default shows the current reset
+  period; can switch to a previous period or "Overall".
+- `analytics.js` — charts view (calibration + equity), also with the season picker.
+  **`NRB.seasonPicker(host, onChange)`** (util.js) fetches `/api/seasons`, renders a
+  `<select>` (Current / each previous period / Overall), and is hidden until there's been
+  ≥1 reset. Both stats views pass the chosen value as `/api/analytics?season=`.
 - `slip.js`/`slip.css` — floating bet-slip button + panel for **parlays**.
 - `views.css` — portfolio + analytics styles.
 - `styles.css` — design tokens (dark default + light theme via `:root[data-theme=light]`),
   shell, shared atoms, market box, carousel, drawer, onboarding, banner, icons.
 - `sw.js` — service worker, **network-first** (always fresh online, cache fallback
   offline). **Bump `CACHE` (e.g. `nrb-shell-v16`) on every shell change** and add any
-  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v16`.)
+  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v21`.)
 - `manifest.json`, `icon.svg` — PWA install metadata.
 
 ### API (all JSON; money in dollars; prices dollars 0–1; user via `X-User-Id` header)
@@ -216,7 +269,11 @@ event], event_title) · `/api/history?ticker=&range=1H|6H|1D|1W|1M|ALL` (also
 `/api/quote?ticker=&side=&contracts=` · `GET/POST /api/bets` · `/api/bets/{id}/close` ·
 `/api/bets/{id}/force_settle` · `/api/settle` · `/api/parlays` (GET list / POST create)
 · `/api/parlays/{id}/force_settle` · `/api/account` · `/api/summary` (light: balance +
-equity) · `/api/account/reset` · `/api/analytics` · **`POST /api/auth/signup`**
+equity) · `/api/account/reset` (starts a new season; keeps past data) ·
+`/api/analytics?season=` (default current period; `season=N` for a past period;
+`season=all` for overall — returns `season`/`current_season` too) ·
+**`GET /api/seasons`** (`{current, seasons:[{season, started_at, ended_at, is_current,
+n_bets, net}]}`) · **`POST /api/auth/signup`**
 (→ `{token, user_id, login, recovery_code}`) · **`POST /api/auth/login`** ·
 **`POST /api/auth/request-reset`** (email a time-limited reset code; needs SMTP env
 configured, else 503) · **`POST /api/auth/recover`** (login+code+new password —
@@ -232,7 +289,10 @@ or burger → Account opens it. Signup also takes a `display` (display name).
 **Social API:** `GET/POST /api/me/profile` · `GET /api/u/{handle}` ·
 `GET /api/leaderboard` · `GET /api/feed` · `GET /api/comments?thread=` ·
 `GET /api/comments/all` · `POST /api/comments` (+ `/{id}/delete`, `/{id}/report`) ·
-`POST /api/reactions` · `POST /api/bets/{id}/public`.
+`POST /api/reactions` · `POST /api/bets/{id}/public`. Feed/profile bet cards include
+`outcome_name` (the backed team/candidate). `POST /api/comments` also accepts a `game`
+field (short live-score label, ≤80 chars) stored as `comments.game_state` and returned by
+the comment list endpoints.
 
 **Env vars (set in Render):** `DATABASE_URL` (Neon Postgres), `BREVO_API_KEY` +
 `BREVO_SENDER` (email reset), optional `ADMIN_HANDLES` (comma list of moderator

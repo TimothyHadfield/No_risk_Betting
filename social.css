@@ -69,6 +69,10 @@
 .so-comment:last-child { border-bottom: none; padding-bottom: 0; }
 .so-comment-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
 .so-comment-body { font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+/* live score/clock captured when a comment was posted */
+.so-gtag { display: inline-block; margin: 2px 0 6px; padding: 2px 8px; font: 600 11.5px/1.4 var(--font);
+  letter-spacing: .2px; color: var(--accent); background: var(--accent-soft, var(--bg-elev2));
+  border: 1px solid var(--border); border-radius: var(--radius-pill); }
 .so-comment-foot { display: flex; align-items: center; gap: 12px; margin-top: 7px; }
 .so-cbtn { background: none; border: none; color: var(--muted); font: 600 12px var(--font); cursor: pointer; padding: 0; }
 .so-cbtn:hover { color: var(--text); }

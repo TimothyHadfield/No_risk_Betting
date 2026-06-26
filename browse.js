@@ -36,6 +36,19 @@
     const el = sectionBarEl(); if (el) el.style.display = show ? "" : "none";
   }
 
+  // Float favorited categories to the top (just under "For You"), preserving the
+  // original relative order within each group.
+  function reorderRows(rows) {
+    const favSet = new Set(NRB.favCat.list());
+    const special = [], favd = [], rest = [];
+    rows.forEach((r) => {
+      if (r.key === "foryou") special.push(r);
+      else if (favSet.has(r.key)) favd.push(r);
+      else rest.push(r);
+    });
+    return [...special, ...favd, ...rest];
+  }
+
   const browse = {
     _io: null,
     _searchTimer: null,
@@ -106,30 +119,69 @@
       if (forYou.length) rows.push({ key: "foryou", title: "⭐ For You", events: forYou });
       sections.forEach((s) => rows.push(s));
 
-      // section bar chips
-      const secbar = $bar();
-      secbar.innerHTML = rows.map((r, i) =>
-        `<button class="chip ${i === 0 ? "active" : ""}" data-target="sec-${r.key}">${NRB.fmt.esc(NRB.fmt.title(r.title))}</button>`
-      ).join("");
-      secbar.querySelectorAll(".chip").forEach((c) =>
-        c.addEventListener("click", () => {
-          secbar.querySelectorAll(".chip").forEach((x) => x.classList.remove("active"));
-          c.classList.add("active");
-          c.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-          scrollToCarousel(c.dataset.target);
-        }));
+      this._rows = rows;
+      this._container = container;
+      this._renderRows();
+      this._wireCatAdd();
 
-      // feed of carousels
+      // re-render the feed live when a category is (un)favorited or (un)hidden
+      if (!this._catSubbed) {
+        this._catSubbed = true;
+        const onCatChange = () => {
+          if (NRB.current.name === "browse" && this._rows) { this._renderRows(); refreshCatPanel(); }
+        };
+        NRB.favCat.onChange(onCatChange);
+        NRB.hiddenCat.onChange(onCatChange);
+      }
+    },
+
+    // Show + wire the "+" (re-add categories) button in the section bar.
+    _wireCatAdd() {
+      const btn = document.getElementById("cat-add");
+      if (!btn) return;
+      btn.hidden = false;
+      if (!btn._wired) {
+        btn._wired = true;
+        btn.addEventListener("click", (e) => { e.stopPropagation(); toggleCatPanel(btn); });
+      }
+    },
+
+    // Render the section bar + carousel feed from this._rows, with favorited
+    // categories floated to the top. Re-runnable (used on favorite toggle).
+    _renderRows() {
+      const container = this._container;
+      if (!container) return;
+      // favorites float up; hidden categories drop out of the feed entirely
+      const rows = reorderRows(this._rows)
+        .filter((r) => r.key === "foryou" || !NRB.hiddenCat.has(r.key));
+
+      const secbar = $bar();
+      if (secbar) {
+        secbar.innerHTML = rows.map((r, i) =>
+          `<button class="chip ${i === 0 ? "active" : ""}" data-target="sec-${r.key}">${NRB.fmt.esc(NRB.fmt.title(r.title))}</button>`
+        ).join("");
+        secbar.querySelectorAll(".chip").forEach((c) =>
+          c.addEventListener("click", () => {
+            secbar.querySelectorAll(".chip").forEach((x) => x.classList.remove("active"));
+            c.classList.add("active");
+            c.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+            scrollToCarousel(c.dataset.target);
+          }));
+      }
+
       const feed = container.querySelector("#feed") || container;
       feed.innerHTML = "";
-      rows.forEach((r) => feed.appendChild(NRB.carousel(r.title, r.events, { id: "sec-" + r.key })));
+      rows.forEach((r) => feed.appendChild(NRB.carousel(r.title, r.events, {
+        id: "sec-" + r.key, favKey: r.key === "foryou" ? null : r.key,
+      })));
 
       // scroll-spy: highlight the chip for the carousel nearest the top
+      if (this._io) this._io.disconnect();
       this._io = new IntersectionObserver((entries) => {
         entries.forEach((en) => {
           if (en.isIntersecting) {
             const id = en.target.id;
-            secbar.querySelectorAll(".chip").forEach((x) =>
+            if (secbar) secbar.querySelectorAll(".chip").forEach((x) =>
               x.classList.toggle("active", x.dataset.target === id));
           }
         });
@@ -138,10 +190,66 @@
     },
     unmount() {
       if (this._io) { this._io.disconnect(); this._io = null; }
+      closeCatPanel();
+      const btn = document.getElementById("cat-add");
+      if (btn) btn.hidden = true;
       clearBar();
     },
   };
   NRB.views.browse = browse;
+
+  // ---- "+" re-add hidden categories popover --------------------------------
+  function titleForKey(key) {
+    const r = (browse._rows || []).find((x) => x.key === key);
+    return r ? NRB.fmt.title(r.title) : key.replace(/^cat:/, "");
+  }
+
+  function renderCatPanel(panel) {
+    const hidden = NRB.hiddenCat.list();
+    panel.innerHTML =
+      `<div class="cat-panel-h">Hidden categories</div>` +
+      (hidden.length
+        ? `<div class="cat-panel-list">${hidden.map((k) =>
+            `<button class="cat-panel-item" data-key="${NRB.fmt.esc(k)}">
+               <span>${NRB.fmt.esc(titleForKey(k))}</span><span class="cat-panel-add">+ Add</span>
+             </button>`).join("")}</div>`
+        : `<div class="cat-panel-empty">No hidden categories.<br>Tap ✕ on any category header to hide it.</div>`);
+    panel.querySelectorAll(".cat-panel-item").forEach((it) =>
+      it.addEventListener("click", (e) => {
+        e.stopPropagation();
+        NRB.hiddenCat.remove(it.dataset.key);   // onChange re-renders feed + this panel
+      }));
+  }
+
+  function refreshCatPanel() {
+    const panel = document.getElementById("cat-panel");
+    if (panel) renderCatPanel(panel);
+  }
+
+  function onCatPanelDocClick(e) {
+    if (e.target.closest("#cat-panel") || e.target.closest("#cat-add")) return;
+    closeCatPanel();
+  }
+
+  function closeCatPanel() {
+    const panel = document.getElementById("cat-panel");
+    if (panel) panel.remove();
+    document.removeEventListener("click", onCatPanelDocClick);
+    window.removeEventListener("scroll", closeCatPanel, true);
+  }
+
+  function toggleCatPanel(btn) {
+    if (document.getElementById("cat-panel")) { closeCatPanel(); return; }
+    const row = document.querySelector(".sectionbar-row");
+    if (!row) return;
+    const panel = NRB.el(`<div class="cat-panel" id="cat-panel"></div>`);
+    renderCatPanel(panel);
+    row.appendChild(panel);
+    setTimeout(() => {
+      document.addEventListener("click", onCatPanelDocClick);
+      window.addEventListener("scroll", closeCatPanel, true);
+    }, 0);
+  }
 
   // ---- Watchlist view ------------------------------------------------------
   NRB.views.watchlist = {

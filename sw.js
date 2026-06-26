@@ -1,6 +1,6 @@
 /* Service worker: caches the static app shell for offline loading.
    Live data (/api/*) is always fetched from the network. */
-const CACHE = "nrb-shell-v16";
+const CACHE = "nrb-shell-v21";
 const SHELL = [
   "/", "/index.html",
   "/styles.css", "/browse.css", "/detail.css", "/views.css", "/profile.css", "/slip.css", "/social.css",

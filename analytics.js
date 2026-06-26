@@ -35,6 +35,7 @@
     async mount(container, params) {
       container.innerHTML = `
         <div class="an">
+          <div id="an-season" class="prof-season"></div>
           <h2 class="section-title">Performance</h2>
           <div class="an-metrics" id="an-metrics">
             <div class="skeleton" style="height:96px"></div>
@@ -60,13 +61,18 @@
           </div>
         </div>`;
 
+      this._season = "";
+      const seasonHost = container.querySelector("#an-season");
+      NRB.seasonPicker(seasonHost, (val) => { this._season = val; this.load(); });
       await this.load();
     },
 
     async load() {
       let a;
       try {
-        a = await NRB.api("/api/analytics");
+        const url = "/api/analytics" +
+          (this._season ? "?season=" + encodeURIComponent(this._season) : "");
+        a = await NRB.api(url);
       } catch (e) {
         const m = document.getElementById("an-metrics");
         if (m) m.innerHTML = `<div class="card an-metric"><div class="an-metric-label muted">Couldn't load analytics.</div></div>`;

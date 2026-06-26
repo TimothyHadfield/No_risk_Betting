@@ -143,7 +143,8 @@
   };
 
   // ---- favorites (localStorage) -------------------------------------------
-  const LS = { favs: "nrb_favs", views: "nrb_views" };
+  const LS = { favs: "nrb_favs", views: "nrb_views", favCats: "nrb_fav_cats",
+               hiddenCats: "nrb_hidden_cats" };
   const readJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
   const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
   const favSubs = [];
@@ -159,6 +160,75 @@
       return !on;
     },
     onChange: (cb) => favSubs.push(cb),
+  };
+
+  // Favorite whole categories/sections (by section key). Favorited categories
+  // float to the top of the home feed. Stored separately from market favorites.
+  const favCatSubs = [];
+  NRB.favCat = {
+    list: () => readJSON(LS.favCats, []),
+    has: (key) => readJSON(LS.favCats, []).includes(key),
+    toggle: (key) => {
+      let f = readJSON(LS.favCats, []);
+      const on = f.includes(key);
+      f = on ? f.filter((x) => x !== key) : [key, ...f];
+      writeJSON(LS.favCats, f);
+      favCatSubs.forEach((cb) => { try { cb(); } catch (e) {} });
+      return !on;
+    },
+    onChange: (cb) => favCatSubs.push(cb),
+  };
+
+  // Hide whole categories/sections (by section key) from the home feed. Hidden
+  // categories are still searchable and can be re-added from the "+" button.
+  const hiddenCatSubs = [];
+  const fireHidden = () => hiddenCatSubs.forEach((cb) => { try { cb(); } catch (e) {} });
+  NRB.hiddenCat = {
+    list: () => readJSON(LS.hiddenCats, []),
+    has: (key) => readJSON(LS.hiddenCats, []).includes(key),
+    add: (key) => {
+      let f = readJSON(LS.hiddenCats, []);
+      if (!f.includes(key)) { writeJSON(LS.hiddenCats, [key, ...f]); fireHidden(); }
+    },
+    remove: (key) => {
+      let f = readJSON(LS.hiddenCats, []);
+      if (f.includes(key)) { writeJSON(LS.hiddenCats, f.filter((x) => x !== key)); fireHidden(); }
+    },
+    onChange: (cb) => hiddenCatSubs.push(cb),
+  };
+
+  // ---- season (reset-period) picker for the stats views --------------------
+  // Renders a <select> letting the user view the current period (default), any
+  // previous period, or "Overall". Hidden until there's been at least one reset
+  // (i.e. >1 season) since there's nothing to compare yet. onChange receives the
+  // query value to use: "" (current), a season number as string, or "all".
+  NRB.seasonPicker = async function (host, onChange) {
+    if (!host) return;
+    let data;
+    try { data = await NRB.api("/api/seasons"); } catch (e) { host.innerHTML = ""; return; }
+    const seasons = (data && data.seasons) || [];
+    const cur = data && data.current;
+    if (seasons.length <= 1) { host.innerHTML = ""; return; }  // nothing to switch between yet
+    const shortDate = (ts) => ts
+      ? new Date(ts * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+      : "";
+    const prev = seasons.filter((s) => s.season !== cur).sort((a, b) => b.season - a.season);
+    const opt = (val, label) => `<option value="${val}">${esc(label)}</option>`;
+    const prevOpts = prev.map((s) => {
+      const span = s.started_at ? ` (${shortDate(s.started_at)}–${shortDate(s.ended_at)})` : "";
+      return opt(String(s.season), `Period ${s.season}${span}`);
+    }).join("");
+    host.innerHTML =
+      `<label class="season-pick">
+         <span class="season-pick-lbl">Showing</span>
+         <select class="season-pick-sel">
+           ${opt("", "Current period")}
+           ${prevOpts}
+           ${opt("all", "Overall (all periods)")}
+         </select>
+       </label>`;
+    const sel = host.querySelector(".season-pick-sel");
+    sel.addEventListener("change", () => { try { onChange(sel.value); } catch (e) {} });
   };
 
   // ---- view history (localStorage) ----------------------------------------
@@ -245,10 +315,33 @@
     opts = opts || {};
     const wrap = NRB.el(`<section class="carousel"></section>`);
     if (opts.id) wrap.id = opts.id;
-    wrap.innerHTML = `<div class="carousel-head"><h3></h3></div><div class="carousel-track"></div>`;
+    const favable = !!opts.favKey;
+    const favOn = favable && NRB.favCat.has(opts.favKey);
+    wrap.innerHTML =
+      `<div class="carousel-head"><h3></h3>${favable
+        ? `<div class="carousel-acts">
+             <button class="cat-fav ${favOn ? "on" : ""}" aria-pressed="${favOn}"
+               title="Favorite this category">${favOn ? "★" : "☆"}</button>
+             <button class="cat-hide" title="Hide this category"
+               aria-label="Hide this category">✕</button>
+           </div>`
+        : ""}</div><div class="carousel-track"></div>`;
     wrap.querySelector("h3").textContent = NRB.fmt.title(title);
     const track = wrap.querySelector(".carousel-track");
     (events || []).forEach((e) => track.appendChild(NRB.box(e)));
+    const fb = wrap.querySelector(".cat-fav");
+    if (fb) fb.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const on = NRB.favCat.toggle(opts.favKey);
+      fb.classList.toggle("on", on);
+      fb.textContent = on ? "★" : "☆";
+      fb.setAttribute("aria-pressed", on);
+    });
+    const hb = wrap.querySelector(".cat-hide");
+    if (hb) hb.addEventListener("click", (e) => {
+      e.stopPropagation();
+      NRB.hiddenCat.add(opts.favKey);   // removes it from the feed (re-add via "+")
+    });
     return wrap;
   };
 
@@ -718,9 +811,11 @@
   }
 
   async function resetFlow() {
-    if (!confirm("Reset virtual balance to $1,000 and delete all bets?")) return;
+    if (!confirm("Start a new period? Your balance goes back to $1,000 and any " +
+                 "open positions are closed out. Your past bets stay saved — you " +
+                 "can still review them in your stats by switching periods.")) return;
     await NRB.api("/api/account/reset", { method: "POST", body: { starting: 1000 } });
-    NRB.toast("Account reset.");
+    NRB.toast("New period started — balance reset to $1,000.");
     await NRB.refreshAccount();
     NRB.go(NRB.current.name || "browse", NRB.current.params);
   }

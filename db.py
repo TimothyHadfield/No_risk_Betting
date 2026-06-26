@@ -177,7 +177,18 @@ def init(db_path=DB_PATH):
             user_id     TEXT PRIMARY KEY,
             balance     {num} NOT NULL,
             starting    {num} NOT NULL,
-            created_at  {num} NOT NULL
+            created_at  {num} NOT NULL,
+            season      INTEGER NOT NULL DEFAULT 1
+        );
+
+        -- one row per reset period ("season"); lets stats be sliced per reset
+        CREATE TABLE IF NOT EXISTS seasons (
+            user_id          TEXT NOT NULL,
+            season           INTEGER NOT NULL,
+            started_at       {num} NOT NULL,
+            ended_at         {num},
+            starting_balance {num} NOT NULL,
+            PRIMARY KEY (user_id, season)
         );
 
         CREATE TABLE IF NOT EXISTS bets (
@@ -186,6 +197,7 @@ def init(db_path=DB_PATH):
             ticker          TEXT NOT NULL,
             event_ticker    TEXT,
             title           TEXT,
+            outcome_name    TEXT,
             side            TEXT NOT NULL,
             contracts       {num} NOT NULL,
             avg_price       {num} NOT NULL,
@@ -204,13 +216,15 @@ def init(db_path=DB_PATH):
             category        TEXT,
             user_prob       {num},
             is_public       INTEGER DEFAULT 0,
-            hidden          INTEGER DEFAULT 0
+            hidden          INTEGER DEFAULT 0,
+            season          INTEGER NOT NULL DEFAULT 1
         );
 
         CREATE TABLE IF NOT EXISTS equity_history (
             user_id     TEXT,
             ts          {num} NOT NULL,
-            equity      {num} NOT NULL
+            equity      {num} NOT NULL,
+            season      INTEGER NOT NULL DEFAULT 1
         );
 
         CREATE TABLE IF NOT EXISTS parlays (
@@ -223,7 +237,8 @@ def init(db_path=DB_PATH):
             payout          {num},
             realized_pnl    {num},
             placed_at       {num} NOT NULL,
-            closed_at       {num}
+            closed_at       {num},
+            season          INTEGER NOT NULL DEFAULT 1
         );
 
         CREATE TABLE IF NOT EXISTS parlay_legs (
@@ -277,6 +292,7 @@ def init(db_path=DB_PATH):
             status      TEXT NOT NULL DEFAULT 'visible',
             ref_ticker  TEXT,
             ref_title   TEXT,
+            game_state  TEXT,
             created_at  {num} NOT NULL
         );
 
@@ -353,13 +369,21 @@ def _migrate():
     if "hidden" not in _table_columns("bets"):
         _exec("ALTER TABLE bets ADD COLUMN hidden INTEGER DEFAULT 0")
         _commit()
+    if "outcome_name" not in _table_columns("bets"):
+        _exec("ALTER TABLE bets ADD COLUMN outcome_name TEXT")
+        _commit()
     if "bets_private" not in _table_columns("profiles"):
         _exec("ALTER TABLE profiles ADD COLUMN bets_private INTEGER DEFAULT 0")
         _commit()
     ccols = _table_columns("comments")
-    for col in ("ref_ticker", "ref_title"):
+    for col in ("ref_ticker", "ref_title", "game_state"):
         if col and col not in ccols:
             _exec(f"ALTER TABLE comments ADD COLUMN {col} TEXT")
+            _commit()
+    # season tagging (reset periods) -- default 1 so all existing data is season 1
+    for tbl in ("accounts", "bets", "parlays", "equity_history"):
+        if tbl and "season" not in _table_columns(tbl):
+            _exec(f"ALTER TABLE {tbl} ADD COLUMN season INTEGER NOT NULL DEFAULT 1")
             _commit()
 
 
@@ -375,10 +399,56 @@ def _ensure_account(uid, starting=DEFAULT_STARTING_BALANCE):
               "VALUES (?,?,?,?)", (uid, starting, starting, time.time()))
 
 
+def _account_season(uid):
+    """Current season number for an account (caller holds _lock)."""
+    row = _query_one("SELECT season FROM accounts WHERE user_id = ?", (uid,))
+    return (row["season"] if row and row.get("season") else 1) or 1
+
+
+def _ensure_season_row(uid):
+    """Make sure a `seasons` row exists for the account's current season
+    (back-fills season 1 for accounts that predate the seasons feature)."""
+    acct = _query_one("SELECT season, starting, created_at FROM accounts "
+                      "WHERE user_id = ?", (uid,))
+    if not acct:
+        return
+    season = (acct.get("season") or 1)
+    if _query_one("SELECT 1 FROM seasons WHERE user_id = ? AND season = ?",
+                  (uid, season)):
+        return
+    if USE_PG:
+        _exec("INSERT INTO seasons (user_id, season, started_at, starting_balance) "
+              "VALUES (?,?,?,?) ON CONFLICT (user_id, season) DO NOTHING",
+              (uid, season, acct.get("created_at") or time.time(),
+               acct.get("starting") or DEFAULT_STARTING_BALANCE))
+    else:
+        _exec("INSERT OR IGNORE INTO seasons (user_id, season, started_at, "
+              "starting_balance) VALUES (?,?,?,?)",
+              (uid, season, acct.get("created_at") or time.time(),
+               acct.get("starting") or DEFAULT_STARTING_BALANCE))
+
+
+@_with_retry
+def current_season(uid):
+    with _lock:
+        return _account_season(uid)
+
+
+@_with_retry
+def list_seasons(uid):
+    """All reset periods for a user, oldest first, with start/end timestamps."""
+    with _lock:
+        _ensure_account(uid)
+        _commit()
+        return _query("SELECT season, started_at, ended_at, starting_balance "
+                      "FROM seasons WHERE user_id = ? ORDER BY season", (uid,))
+
+
 @_with_retry
 def get_account(uid):
     with _lock:
         _ensure_account(uid)
+        _ensure_season_row(uid)
         _commit()
         return _query_one("SELECT * FROM accounts WHERE user_id = ?", (uid,))
 
@@ -394,16 +464,30 @@ def adjust_balance(uid, delta):
 
 @_with_retry
 def reset_account(uid, starting=DEFAULT_STARTING_BALANCE):
+    """Start a NEW season: balance back to `starting`, but keep all prior bets/
+    parlays/equity so the user can still observe past periods in their stats.
+    Open positions from the old season are voided (excluded from stats) so the
+    season is self-contained and nothing leaks into the new balance."""
     with _lock:
         now = time.time()
-        _exec("DELETE FROM bets WHERE user_id = ?", (uid,))
-        _exec("DELETE FROM equity_history WHERE user_id = ?", (uid,))
-        _exec("DELETE FROM parlay_legs WHERE parlay_id IN "
-              "(SELECT id FROM parlays WHERE user_id = ?)", (uid,))
-        _exec("DELETE FROM parlays WHERE user_id = ?", (uid,))
         _ensure_account(uid, starting)
-        _exec("UPDATE accounts SET balance = ?, starting = ?, created_at = ? "
-              "WHERE user_id = ?", (starting, starting, now, uid))
+        _ensure_season_row(uid)   # make sure the outgoing season has a row to close
+        cur = _account_season(uid)
+        # finalize still-open positions from the old season (void = not a win/loss)
+        _exec("UPDATE bets SET status = 'void', closed_at = ? "
+              "WHERE user_id = ? AND status = 'open'", (now, uid))
+        _exec("UPDATE parlays SET status = 'void', closed_at = ? "
+              "WHERE user_id = ? AND status = 'open'", (now, uid))
+        _exec("UPDATE parlay_legs SET status = 'void' WHERE parlay_id IN "
+              "(SELECT id FROM parlays WHERE user_id = ? AND status = 'void')", (uid,))
+        # close out the current season and open the next
+        _exec("UPDATE seasons SET ended_at = ? "
+              "WHERE user_id = ? AND season = ? AND ended_at IS NULL", (now, uid, cur))
+        new_season = cur + 1
+        _exec("UPDATE accounts SET balance = ?, starting = ?, created_at = ?, "
+              "season = ? WHERE user_id = ?", (starting, starting, now, new_season, uid))
+        _exec("INSERT INTO seasons (user_id, season, started_at, starting_balance) "
+              "VALUES (?,?,?,?)", (uid, new_season, now, starting))
         _commit()
 
 
@@ -600,6 +684,7 @@ def delete_user(uid):
         _exec("DELETE FROM reactions WHERE user_id = ?", (uid,))
         _exec("DELETE FROM reports WHERE reporter_id = ?", (uid,))
         _exec("DELETE FROM profiles WHERE user_id = ?", (uid,))
+        _exec("DELETE FROM seasons WHERE user_id = ?", (uid,))
         _exec("DELETE FROM accounts WHERE user_id = ?", (uid,))
         _exec("DELETE FROM users WHERE user_id = ?", (uid,))
         _commit()
@@ -640,14 +725,16 @@ def insert_bet(uid, b):
     with _lock:
         return _insert(
             """INSERT INTO bets
-               (user_id, ticker, event_ticker, title, side, contracts, avg_price,
-                stake, fee, cost_basis, status, partial, estimated_fill, placed_at,
-                close_time, category, user_prob)
-               VALUES (?,?,?,?,?,?,?,?,?,?, 'open', ?,?,?,?,?,?)""",
-            (uid, b["ticker"], b.get("event_ticker"), b.get("title"), b["side"],
+               (user_id, ticker, event_ticker, title, outcome_name, side, contracts,
+                avg_price, stake, fee, cost_basis, status, partial, estimated_fill,
+                placed_at, close_time, category, user_prob, season)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?, 'open', ?,?,?,?,?,?,?)""",
+            (uid, b["ticker"], b.get("event_ticker"), b.get("title"),
+             b.get("outcome_name"), b["side"],
              b["contracts"], b["avg_price"], b["stake"], b["fee"], b["cost_basis"],
              1 if b.get("partial") else 0, 1 if b.get("estimated_fill") else 0,
-             time.time(), b.get("close_time"), b.get("category"), b.get("user_prob")))
+             time.time(), b.get("close_time"), b.get("category"), b.get("user_prob"),
+             _account_season(uid)))
 
 
 @_with_retry
@@ -657,13 +744,16 @@ def get_bet(bet_id):
 
 
 @_with_retry
-def list_bets(uid, status=None):
+def list_bets(uid, status=None, season=None):
+    """Bets for a user. `season` filters to one reset period; None = all seasons."""
     with _lock:
+        sql = "SELECT * FROM bets WHERE user_id = ?"
+        params = [uid]
         if status:
-            return _query("SELECT * FROM bets WHERE user_id = ? AND status = ? "
-                          "ORDER BY placed_at DESC", (uid, status))
-        return _query("SELECT * FROM bets WHERE user_id = ? ORDER BY placed_at DESC",
-                      (uid,))
+            sql += " AND status = ?"; params.append(status)
+        if season is not None:
+            sql += " AND season = ?"; params.append(season)
+        return _query(sql + " ORDER BY placed_at DESC", tuple(params))
 
 
 @_with_retry
@@ -687,14 +777,17 @@ def resolve_bet(bet_id, status, result, payout, realized_pnl):
 @_with_retry
 def record_equity(uid, equity):
     with _lock:
-        _exec("INSERT INTO equity_history (user_id, ts, equity) VALUES (?,?,?)",
-              (uid, time.time(), equity))
+        _exec("INSERT INTO equity_history (user_id, ts, equity, season) VALUES (?,?,?,?)",
+              (uid, time.time(), equity, _account_season(uid)))
         _commit()
 
 
 @_with_retry
-def equity_history(uid):
+def equity_history(uid, season=None):
     with _lock:
+        if season is not None:
+            return _query("SELECT ts, equity FROM equity_history "
+                          "WHERE user_id = ? AND season = ? ORDER BY ts", (uid, season))
         return _query("SELECT ts, equity FROM equity_history WHERE user_id = ? "
                       "ORDER BY ts", (uid,))
 
@@ -705,19 +798,20 @@ def equity_history(uid):
 def insert_parlay(uid, stake, cost_basis, combined_mult, legs):
     with _lock:
         # Insert parlay + its legs atomically (one commit at the end).
+        season = _account_season(uid)
         if USE_PG:
             cur = _conn.cursor()
             cur.execute(_q("INSERT INTO parlays (user_id, stake, cost_basis, "
-                           "combined_mult, status, placed_at) "
-                           "VALUES (?,?,?,?, 'open', ?) RETURNING id"),
-                        (uid, stake, cost_basis, combined_mult, time.time()))
+                           "combined_mult, status, placed_at, season) "
+                           "VALUES (?,?,?,?, 'open', ?,?) RETURNING id"),
+                        (uid, stake, cost_basis, combined_mult, time.time(), season))
             pid = cur.fetchone()[0]
             cur.close()
         else:
             cur = _conn.execute(
                 "INSERT INTO parlays (user_id, stake, cost_basis, combined_mult, "
-                "status, placed_at) VALUES (?,?,?,?, 'open', ?)",
-                (uid, stake, cost_basis, combined_mult, time.time()))
+                "status, placed_at, season) VALUES (?,?,?,?, 'open', ?,?)",
+                (uid, stake, cost_basis, combined_mult, time.time(), season))
             pid = cur.lastrowid
         for lg in legs:
             _exec("INSERT INTO parlay_legs (parlay_id, ticker, event_ticker, title, "
@@ -744,14 +838,15 @@ def get_parlay(pid):
 
 
 @_with_retry
-def list_parlays(uid, status=None):
+def list_parlays(uid, status=None, season=None):
     with _lock:
+        sql = "SELECT * FROM parlays WHERE user_id = ?"
+        params = [uid]
         if status:
-            rows = _query("SELECT * FROM parlays WHERE user_id = ? AND status = ? "
-                          "ORDER BY placed_at DESC", (uid, status))
-        else:
-            rows = _query("SELECT * FROM parlays WHERE user_id = ? "
-                          "ORDER BY placed_at DESC", (uid,))
+            sql += " AND status = ?"; params.append(status)
+        if season is not None:
+            sql += " AND season = ?"; params.append(season)
+        rows = _query(sql + " ORDER BY placed_at DESC", tuple(params))
         for p in rows:
             p["legs"] = _legs_for(p["id"])
         return rows
@@ -870,8 +965,8 @@ def set_bet_public(bet_id, uid, public):
         _commit()
 
 
-_FEED_COLS = ("b.id, b.ticker, b.event_ticker, b.title, b.side, b.contracts, "
-              "b.avg_price, b.stake, b.cost_basis, b.status, b.result, "
+_FEED_COLS = ("b.id, b.ticker, b.event_ticker, b.title, b.outcome_name, b.side, "
+              "b.contracts, b.avg_price, b.stake, b.cost_basis, b.status, b.result, "
               "b.realized_pnl, b.placed_at, b.category, b.user_prob, p.handle")
 
 
@@ -899,12 +994,13 @@ def public_bets_for_user(uid, limit=50):
 # ---- comments ------------------------------------------------------------
 
 @_with_retry
-def add_comment(uid, thread, body, ref_ticker=None, ref_title=None):
+def add_comment(uid, thread, body, ref_ticker=None, ref_title=None,
+                game_state=None):
     with _lock:
         return _insert(
             "INSERT INTO comments (user_id, thread, body, status, ref_ticker, "
-            "ref_title, created_at) VALUES (?,?,?, 'visible', ?,?,?)",
-            (uid, thread, body, ref_ticker, ref_title, time.time()))
+            "ref_title, game_state, created_at) VALUES (?,?,?, 'visible', ?,?,?,?)",
+            (uid, thread, body, ref_ticker, ref_title, game_state, time.time()))
 
 
 @_with_retry
@@ -913,7 +1009,8 @@ def all_comments(limit=80):
     with _lock:
         return _query(
             "SELECT c.id, c.user_id, c.body, c.created_at, c.ref_ticker, c.ref_title, "
-            "p.handle FROM comments c LEFT JOIN profiles p ON c.user_id = p.user_id "
+            "c.game_state, p.handle FROM comments c "
+            "LEFT JOIN profiles p ON c.user_id = p.user_id "
             "WHERE c.status = 'visible' ORDER BY c.created_at DESC LIMIT ?", (limit,))
 
 
@@ -921,7 +1018,7 @@ def all_comments(limit=80):
 def list_comments(thread, limit=200):
     with _lock:
         return _query(
-            "SELECT c.id, c.user_id, c.body, c.created_at, p.handle "
+            "SELECT c.id, c.user_id, c.body, c.created_at, c.game_state, p.handle "
             "FROM comments c LEFT JOIN profiles p ON c.user_id = p.user_id "
             "WHERE c.thread = ? AND c.status = 'visible' "
             "ORDER BY c.created_at ASC LIMIT ?", (thread, limit))

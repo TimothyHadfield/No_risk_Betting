@@ -53,6 +53,8 @@
             </p>
           </header>
 
+          <div id="prof-season" class="prof-season"></div>
+
           <div id="prof-hero">
             <div class="card prof-hero prof-hero-loading">
               <div class="skeleton" style="height:120px"></div>
@@ -99,13 +101,18 @@
           </div>
         </div>`;
 
+      this._season = "";
+      const seasonHost = container.querySelector("#prof-season");
+      NRB.seasonPicker(seasonHost, (val) => { this._season = val; this.load(); });
       await this.load();
     },
 
     async load() {
       let a;
       try {
-        a = await NRB.api("/api/analytics");
+        const url = "/api/analytics" +
+          (this._season ? "?season=" + encodeURIComponent(this._season) : "");
+        a = await NRB.api(url);
       } catch (e) {
         const hero = document.getElementById("prof-hero");
         if (hero) {
