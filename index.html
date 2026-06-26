@@ -81,27 +81,64 @@
     </div>
   </div>
 
-  <!-- account: log in / sign up (optional cross-device sync) -->
+  <!-- account: log in / sign up / recovery (optional cross-device sync) -->
   <div id="auth-modal" class="auth-overlay hidden">
     <div class="auth-box">
       <button class="auth-close" id="auth-close" aria-label="Close">×</button>
       <div class="auth-mark">◆</div>
       <h2 id="auth-title">Log in</h2>
-      <p class="auth-sub" id="auth-sub">Save your bets and balance, and use them on any device.</p>
-      <div id="auth-forms">
-        <input id="auth-email" class="auth-input" type="email" placeholder="Email" autocomplete="email" autocapitalize="none" spellcheck="false">
+      <p class="auth-sub" id="auth-sub"></p>
+
+      <!-- credentials: login / signup / recovery -->
+      <div id="auth-panel-form">
+        <input id="auth-login" class="auth-input" type="text" placeholder="Username or email" autocomplete="username" autocapitalize="none" spellcheck="false">
+        <input id="auth-code" class="auth-input hidden" type="text" placeholder="Recovery code (NRB-XXXX-XXXX-XXXX)" autocapitalize="characters" spellcheck="false">
         <input id="auth-pass" class="auth-input" type="password" placeholder="Password (6+ characters)" autocomplete="current-password">
         <div id="auth-error" class="auth-error hidden"></div>
         <button id="auth-submit" class="btn btn-primary btn-block">Log in</button>
-        <p class="auth-switch"><span id="auth-switch-text">New here?</span>
-          <a href="#" id="auth-switch-link">Create an account</a></p>
+        <p class="auth-links">
+          <a href="#" id="auth-link-primary" data-go="signup">Create an account</a>
+          <a href="#" id="auth-link-secondary" data-go="recovery">Forgot password?</a>
+        </p>
       </div>
-      <div id="auth-account" class="hidden">
-        <p class="auth-signed">Signed in as <b id="auth-email-label"></b></p>
+
+      <!-- one-time recovery code shown after signup -->
+      <div id="auth-panel-code" class="hidden">
+        <p class="auth-sub">Save this <b>recovery code</b>. It's the only way back into your account if you forget your password — we can't email it to you.</p>
+        <div class="auth-code-box"><code id="auth-code-value"></code></div>
+        <button id="auth-code-copy" class="btn btn-block">Copy code</button>
+        <label class="auth-check"><input type="checkbox" id="auth-code-ack"> I've saved my recovery code somewhere safe.</label>
+        <button id="auth-code-done" class="btn btn-primary btn-block" disabled>Continue</button>
+      </div>
+
+      <!-- logged-in account panel -->
+      <div id="auth-panel-account" class="hidden">
+        <p class="auth-signed">Signed in as <b id="auth-login-label"></b></p>
         <p class="auth-sub">Your bets and balance sync to this account on any device you log in from.</p>
+        <button id="auth-go-changepw" class="btn btn-block">Change password</button>
         <button id="auth-logout" class="btn btn-block">Log out</button>
+        <button id="auth-go-delete" class="btn btn-block auth-danger">Delete account</button>
       </div>
-      <p class="auth-fine">We store only your email and a salted, encrypted password — no real money, no third parties.</p>
+
+      <!-- change password -->
+      <div id="auth-panel-changepw" class="hidden">
+        <input id="auth-cp-current" class="auth-input" type="password" placeholder="Current password" autocomplete="current-password">
+        <input id="auth-cp-new" class="auth-input" type="password" placeholder="New password (6+ characters)" autocomplete="new-password">
+        <div id="auth-cp-error" class="auth-error hidden"></div>
+        <button id="auth-cp-submit" class="btn btn-primary btn-block">Update password</button>
+        <p class="auth-links"><a href="#" id="auth-cp-back">Back</a></p>
+      </div>
+
+      <!-- delete account confirm -->
+      <div id="auth-panel-delete" class="hidden">
+        <p class="auth-sub">This permanently deletes your account, bets, and history. It can't be undone.</p>
+        <input id="auth-del-pass" class="auth-input" type="password" placeholder="Enter your password to confirm" autocomplete="current-password">
+        <div id="auth-del-error" class="auth-error hidden"></div>
+        <button id="auth-del-submit" class="btn btn-block auth-danger-solid">Delete my account</button>
+        <p class="auth-links"><a href="#" id="auth-del-back">Cancel</a></p>
+      </div>
+
+      <p class="auth-fine">We store only your login plus a salted, encrypted password and recovery code — no real money, no third parties.</p>
     </div>
   </div>
 

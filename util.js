@@ -292,33 +292,52 @@
   };
 
   // ---- auth (optional cross-device accounts) -------------------------------
+  // Login id is a username OR email; recovery is via a one-time code (no email).
   function applyLogin(r) {
     setToken(r.token);
-    try { localStorage.setItem("nrb_email", r.email || ""); } catch (e) {}
+    try { localStorage.setItem("nrb_login", r.login || ""); } catch (e) {}
     // Align the anonymous fallback id with the account so views that read the
     // raw uid stay consistent while logged in.
-    try { localStorage.setItem("nrb_uid", r.user_id); } catch (e) {}
+    if (r.user_id) { try { localStorage.setItem("nrb_uid", r.user_id); } catch (e) {} }
+  }
+  function clearLogin() {
+    setToken("");
+    // Drop the account identity and start a fresh anonymous session so the next
+    // visitor on this browser doesn't see the account's data.
+    try { localStorage.removeItem("nrb_login"); localStorage.removeItem("nrb_uid"); } catch (e) {}
+    getUid();  // regenerate a new anonymous id
   }
   NRB.auth = {
     isLoggedIn: () => !!getToken(),
-    email: () => { try { return localStorage.getItem("nrb_email") || ""; } catch (e) { return ""; } },
-    signup: async (email, password) => {
-      const r = await NRB.api("/api/auth/signup", { method: "POST", body: { email, password } });
+    name: () => { try { return localStorage.getItem("nrb_login") || ""; } catch (e) { return ""; } },
+    signup: async (login, password) => {
+      const r = await NRB.api("/api/auth/signup", { method: "POST", body: { login, password } });
+      if (r && r.ok) applyLogin(r);   // r also carries recovery_code (shown once)
+      return r;
+    },
+    login: async (login, password) => {
+      const r = await NRB.api("/api/auth/login", { method: "POST", body: { login, password } });
       if (r && r.ok) applyLogin(r);
       return r;
     },
-    login: async (email, password) => {
-      const r = await NRB.api("/api/auth/login", { method: "POST", body: { email, password } });
+    recover: async (login, code, password) => {
+      const r = await NRB.api("/api/auth/recover", { method: "POST", body: { login, code, password } });
       if (r && r.ok) applyLogin(r);
+      return r;
+    },
+    changePassword: async (current, password) => {
+      const r = await NRB.api("/api/auth/password", { method: "POST", body: { current, password } });
+      if (r && r.ok && r.token) setToken(r.token);  // keep this device logged in
+      return r;
+    },
+    deleteAccount: async (password) => {
+      const r = await NRB.api("/api/auth/delete", { method: "POST", body: { password } });
+      if (r && r.ok) { clearLogin(); await NRB.refreshAccount(); }
       return r;
     },
     logout: async () => {
       try { await NRB.api("/api/auth/logout", { method: "POST" }); } catch (e) {}
-      setToken("");
-      // Drop the account identity and start a fresh anonymous session so the
-      // next visitor on this browser doesn't see the account's data.
-      try { localStorage.removeItem("nrb_email"); localStorage.removeItem("nrb_uid"); } catch (e) {}
-      getUid();  // regenerate a new anonymous id
+      clearLogin();
       await NRB.refreshAccount();
     },
   };
@@ -406,67 +425,145 @@
     if (action === "reset") return resetFlow();
     NRB.toast(action.charAt(0).toUpperCase() + action.slice(1) + " — coming soon");
   }
-  // ---- auth modal (login / sign up) ----------------------------------------
+  // ---- auth modal (login / signup / recovery / account) --------------------
+  // mode: "login" | "signup" | "recovery" | "showcode" | "account" |
+  //       "changepw" | "delete"
   let authMode = "login";
   function $(id) { return document.getElementById(id); }
-  function setAuthError(msg) {
-    const e = $("auth-error"); if (!e) return;
+  function show(id, on) { const el = $(id); if (el) el.classList.toggle("hidden", !on); }
+  function setErr(id, msg) {
+    const e = $(id); if (!e) return;
     e.textContent = msg || ""; e.classList.toggle("hidden", !msg);
   }
+  const PANELS = ["form", "code", "account", "changepw", "delete"];
+
   function refreshAuthModal() {
-    const forms = $("auth-forms"), acct = $("auth-account");
-    if (!forms || !acct) return;
-    setAuthError("");
-    if (NRB.auth.isLoggedIn()) {
-      forms.classList.add("hidden"); acct.classList.remove("hidden");
-      $("auth-title").textContent = "Account";
-      $("auth-sub").classList.add("hidden");
-      $("auth-email-label").textContent = NRB.auth.email() || "your account";
-      return;
+    setErr("auth-error", ""); setErr("auth-cp-error", ""); setErr("auth-del-error", "");
+    const loggedIn = NRB.auth.isLoggedIn();
+    if (loggedIn && (authMode === "login" || authMode === "signup" || authMode === "recovery")) {
+      authMode = "account";
     }
-    forms.classList.remove("hidden"); acct.classList.add("hidden");
-    $("auth-sub").classList.remove("hidden");
-    const signup = authMode === "signup";
-    $("auth-title").textContent = signup ? "Create account" : "Log in";
-    $("auth-submit").textContent = signup ? "Create account" : "Log in";
-    $("auth-pass").autocomplete = signup ? "new-password" : "current-password";
-    $("auth-switch-text").textContent = signup ? "Already have an account?" : "New here?";
-    $("auth-switch-link").textContent = signup ? "Log in" : "Create an account";
+    // which panel is visible
+    const panelFor = { login: "form", signup: "form", recovery: "form",
+      showcode: "code", account: "account", changepw: "changepw", delete: "delete" };
+    const active = panelFor[authMode] || "form";
+    PANELS.forEach((p) => show("auth-panel-" + p, p === active));
+
+    const titles = { login: "Log in", signup: "Create account", recovery: "Reset password",
+      showcode: "Save your recovery code", account: "Account",
+      changepw: "Change password", delete: "Delete account" };
+    $("auth-title").textContent = titles[authMode] || "Account";
+
+    const subs = {
+      login: "Log in to sync your bets across devices.",
+      signup: "Pick a username (or use an email) — it's just a login, we never email you.",
+      recovery: "Enter your login and the recovery code you saved at signup.",
+      account: "Your bets and balance sync to this account on any device you log in from.",
+    };
+    const sub = $("auth-sub");
+    if (sub) { sub.textContent = subs[authMode] || ""; sub.classList.toggle("hidden", !subs[authMode]); }
+
+    if (active === "form") {
+      const isLogin = authMode === "login", isSignup = authMode === "signup",
+        isRec = authMode === "recovery";
+      show("auth-code", isRec);                       // recovery-code field
+      $("auth-login").placeholder = "Username or email";
+      $("auth-pass").placeholder = isRec ? "New password (6+ characters)" : "Password (6+ characters)";
+      $("auth-pass").autocomplete = isLogin ? "current-password" : "new-password";
+      $("auth-submit").textContent = isSignup ? "Create account" : isRec ? "Reset password" : "Log in";
+      // links
+      const p = $("auth-link-primary"), s = $("auth-link-secondary");
+      if (isLogin) { p.textContent = "Create an account"; p.dataset.go = "signup";
+        s.textContent = "Forgot password?"; s.dataset.go = "recovery"; show("auth-link-secondary", true); }
+      else if (isSignup) { p.textContent = "I already have an account"; p.dataset.go = "login";
+        show("auth-link-secondary", false); }
+      else { p.textContent = "Back to log in"; p.dataset.go = "login";
+        show("auth-link-secondary", false); }
+    }
+    if (active === "account") {
+      $("auth-login-label").textContent = NRB.auth.name() || "your account";
+    }
   }
   function authOpen(mode) {
-    authMode = mode || "login";
+    authMode = NRB.auth.isLoggedIn() ? "account" : (mode || "login");
     const m = $("auth-modal"); if (!m) return;
     refreshAuthModal(); m.classList.remove("hidden");
-    if (!NRB.auth.isLoggedIn()) { const f = $("auth-email"); if (f) setTimeout(() => f.focus(), 40); }
+    if (authMode === "login" || authMode === "signup" || authMode === "recovery") {
+      const f = $("auth-login"); if (f) setTimeout(() => f.focus(), 40);
+    }
   }
   function authClose() { const m = $("auth-modal"); if (m) m.classList.add("hidden"); }
+  function goMode(mode) { authMode = mode; refreshAuthModal(); }
   function updateDrawerAuth() {
     const l = $("drawer-account-label");
-    if (l) l.textContent = NRB.auth.isLoggedIn() ? (NRB.auth.email() || "Account") : "Log in / Sign up";
+    if (l) l.textContent = NRB.auth.isLoggedIn() ? (NRB.auth.name() || "Account") : "Log in / Sign up";
   }
   NRB.authUI = { open: authOpen, close: authClose, refreshDrawer: updateDrawerAuth };
+
+  async function afterAuthChange(msg) {
+    authClose();
+    updateDrawerAuth();
+    await NRB.refreshAccount();
+    NRB.toast(msg);
+    NRB.go(NRB.current.name || "browse", NRB.current.params);
+  }
+
   async function authSubmit() {
-    const email = ($("auth-email").value || "").trim();
+    const login = ($("auth-login").value || "").trim();
     const pass = $("auth-pass").value || "";
-    if (!email || !pass) { setAuthError("Enter your email and password."); return; }
+    const code = ($("auth-code").value || "").trim();
+    if (!login || !pass || (authMode === "recovery" && !code)) {
+      return setErr("auth-error", "Please fill in every field.");
+    }
     const btn = $("auth-submit"); btn.disabled = true;
     try {
-      const r = authMode === "signup"
-        ? await NRB.auth.signup(email, pass)
-        : await NRB.auth.login(email, pass);
+      let r;
+      if (authMode === "signup") r = await NRB.auth.signup(login, pass);
+      else if (authMode === "recovery") r = await NRB.auth.recover(login, code, pass);
+      else r = await NRB.auth.login(login, pass);
       if (r && r.ok) {
-        authClose();
-        $("auth-pass").value = "";
-        NRB.toast(authMode === "signup" ? "Account created — your bets are saved." : "Logged in.");
+        $("auth-pass").value = ""; $("auth-code").value = "";
         updateDrawerAuth();
-        await NRB.refreshAccount();
-        NRB.go(NRB.current.name || "browse", NRB.current.params);
+        if (authMode === "signup" && r.recovery_code) {
+          // show the one-time recovery code before letting them continue
+          $("auth-code-value").textContent = r.recovery_code;
+          $("auth-code-ack").checked = false; $("auth-code-done").disabled = true;
+          goMode("showcode");
+        } else {
+          await afterAuthChange(authMode === "recovery" ? "Password reset — you're logged in." : "Logged in.");
+        }
       } else {
-        setAuthError((r && r.error) || "Something went wrong. Try again.");
+        setErr("auth-error", (r && r.error) || "Something went wrong. Try again.");
       }
     } catch (e) {
-      setAuthError("Can't reach the server. Try again.");
+      setErr("auth-error", "Can't reach the server. Try again.");
     } finally { btn.disabled = false; }
+  }
+
+  async function changePwSubmit() {
+    const current = $("auth-cp-current").value || "", next = $("auth-cp-new").value || "";
+    if (!current || !next) return setErr("auth-cp-error", "Fill in both fields.");
+    const btn = $("auth-cp-submit"); btn.disabled = true;
+    try {
+      const r = await NRB.auth.changePassword(current, next);
+      if (r && r.ok) { $("auth-cp-current").value = ""; $("auth-cp-new").value = "";
+        authClose(); NRB.toast("Password updated."); }
+      else setErr("auth-cp-error", (r && r.error) || "Couldn't update password.");
+    } catch (e) { setErr("auth-cp-error", "Can't reach the server."); }
+    finally { btn.disabled = false; }
+  }
+
+  async function deleteSubmit() {
+    const pass = $("auth-del-pass").value || "";
+    if (!pass) return setErr("auth-del-error", "Enter your password to confirm.");
+    const btn = $("auth-del-submit"); btn.disabled = true;
+    try {
+      const r = await NRB.auth.deleteAccount(pass);
+      if (r && r.ok) { $("auth-del-pass").value = "";
+        await afterAuthChange("Account deleted."); }
+      else setErr("auth-del-error", (r && r.error) || "Couldn't delete account.");
+    } catch (e) { setErr("auth-del-error", "Can't reach the server."); }
+    finally { btn.disabled = false; }
   }
 
   async function resetFlow() {
@@ -489,21 +586,40 @@
 
     // auth modal wiring
     updateDrawerAuth();
-    const aClose = $("auth-close"); if (aClose) aClose.addEventListener("click", authClose);
+    const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
+    on("auth-close", "click", authClose);
     const aOv = $("auth-modal");
     if (aOv) aOv.addEventListener("click", (e) => { if (e.target === aOv) authClose(); });
-    const aSubmit = $("auth-submit"); if (aSubmit) aSubmit.addEventListener("click", authSubmit);
-    const aSwitch = $("auth-switch-link");
-    if (aSwitch) aSwitch.addEventListener("click", (e) => {
-      e.preventDefault(); authMode = authMode === "signup" ? "login" : "signup"; refreshAuthModal();
+    // credentials form (login / signup / recovery)
+    on("auth-submit", "click", authSubmit);
+    ["auth-login", "auth-pass", "auth-code"].forEach((id) =>
+      on(id, "keydown", (e) => { if (e.key === "Enter") authSubmit(); }));
+    const linkGo = (e) => { e.preventDefault(); goMode(e.currentTarget.dataset.go || "login"); };
+    on("auth-link-primary", "click", linkGo);
+    on("auth-link-secondary", "click", linkGo);
+    // recovery-code panel
+    on("auth-code-ack", "change", (e) => { $("auth-code-done").disabled = !e.currentTarget.checked; });
+    on("auth-code-copy", "click", async () => {
+      const code = $("auth-code-value").textContent;
+      try { await navigator.clipboard.writeText(code); NRB.toast("Recovery code copied."); }
+      catch (e) { NRB.toast("Copy failed — write it down: " + code); }
     });
-    const aPass = $("auth-pass");
-    if (aPass) aPass.addEventListener("keydown", (e) => { if (e.key === "Enter") authSubmit(); });
-    const aLogout = $("auth-logout");
-    if (aLogout) aLogout.addEventListener("click", async () => {
-      await NRB.auth.logout(); updateDrawerAuth(); refreshAuthModal(); authClose();
+    on("auth-code-done", "click", () => afterAuthChange("Account created — your bets are saved."));
+    // account panel
+    on("auth-go-changepw", "click", () => goMode("changepw"));
+    on("auth-go-delete", "click", () => goMode("delete"));
+    on("auth-logout", "click", async () => {
+      await NRB.auth.logout(); updateDrawerAuth(); authClose();
       NRB.toast("Logged out."); NRB.go("browse");
     });
+    // change-password panel
+    on("auth-cp-submit", "click", changePwSubmit);
+    on("auth-cp-new", "keydown", (e) => { if (e.key === "Enter") changePwSubmit(); });
+    on("auth-cp-back", "click", (e) => { e.preventDefault(); goMode("account"); });
+    // delete panel
+    on("auth-del-submit", "click", deleteSubmit);
+    on("auth-del-pass", "keydown", (e) => { if (e.key === "Enter") deleteSubmit(); });
+    on("auth-del-back", "click", (e) => { e.preventDefault(); goMode("account"); });
 
     // first-run onboarding (once per browser)
     let onboarded = false;

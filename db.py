@@ -239,11 +239,13 @@ def init(db_path=DB_PATH):
         );
 
         CREATE TABLE IF NOT EXISTS users (
-            user_id     TEXT PRIMARY KEY,
-            email       TEXT UNIQUE NOT NULL,
-            pass_hash   TEXT NOT NULL,
-            pass_salt   TEXT NOT NULL,
-            created_at  {num} NOT NULL
+            user_id        TEXT PRIMARY KEY,
+            login          TEXT UNIQUE NOT NULL,
+            pass_hash      TEXT NOT NULL,
+            pass_salt      TEXT NOT NULL,
+            recovery_hash  TEXT,
+            recovery_salt  TEXT,
+            created_at     {num} NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS sessions (
@@ -265,6 +267,35 @@ def init(db_path=DB_PATH):
         else:
             _conn.executescript(ddl)
         _conn.commit()
+        _migrate()
+
+
+def _table_columns(table):
+    """Lower-cased set of column names for a table (both backends)."""
+    if USE_PG:
+        rows = _query("SELECT column_name AS name FROM information_schema.columns "
+                      "WHERE table_name = ?", (table,))
+        return {r["name"].lower() for r in rows}
+    rows = _query(f"PRAGMA table_info({table})")
+    return {r["name"].lower() for r in rows}
+
+
+def _migrate():
+    """Idempotently upgrade older databases in place (no data loss):
+      * rename the original `email` column to the generic `login`
+      * add the recovery-code columns
+    Runs every startup; each step is a no-op once applied."""
+    cols = _table_columns("users")
+    if not cols:
+        return
+    if "login" not in cols and "email" in cols:
+        _exec("ALTER TABLE users RENAME COLUMN email TO login")
+        _commit()
+        cols = _table_columns("users")
+    for col in ("recovery_hash", "recovery_salt"):
+        if col not in cols:
+            _exec(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+            _commit()
 
 
 # ---- account -------------------------------------------------------------
@@ -318,59 +349,137 @@ def all_user_ids():
 
 
 # ---- accounts / login (optional cross-device sync) -----------------------
+# Login is a username OR an email -- just an unverified identifier (we never send
+# email). Forgotten passwords are recovered with a one-time RECOVERY CODE shown at
+# signup; both the password and the recovery code are stored only as salted
+# PBKDF2-SHA256 hashes. No plaintext, no third-party service.
 
 _PBKDF2_ROUNDS = 200_000
+# Recovery-code alphabet: unambiguous (no 0/O/1/I/L).
+_RECOVERY_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 
-def _hash_pw(password, salt_hex):
+def _hash_secret(secret, salt_hex):
     return hashlib.pbkdf2_hmac(
-        "sha256", password.encode("utf-8"), bytes.fromhex(salt_hex),
+        "sha256", secret.encode("utf-8"), bytes.fromhex(salt_hex),
         _PBKDF2_ROUNDS).hex()
 
 
+# back-compat alias (older callers/tests used _hash_pw)
+_hash_pw = _hash_secret
+
+
+def _norm_login(s):
+    return (s or "").strip().lower()
+
+
+def _norm_code(s):
+    """Recovery codes compare case-insensitively, ignoring spaces."""
+    return (s or "").strip().upper().replace(" ", "")
+
+
+def gen_recovery_code():
+    groups = ["".join(secrets.choice(_RECOVERY_ALPHABET) for _ in range(4))
+              for _ in range(3)]
+    return "NRB-" + "-".join(groups)
+
+
 @_with_retry
-def create_user(email, password, claim_uid=None):
-    """Register an account. Returns the user_id on success, or None if the email
-    is already taken. If `claim_uid` is an unclaimed anonymous id, it becomes the
-    account's user_id so that browser's existing bets/balance carry over."""
-    email = (email or "").strip().lower()
+def login_taken(login):
     with _lock:
-        if _query_one("SELECT 1 FROM users WHERE email = ?", (email,)):
-            return None
+        return _query_one("SELECT 1 FROM users WHERE login = ?",
+                          (_norm_login(login),)) is not None
+
+
+@_with_retry
+def create_user(login, password, claim_uid=None):
+    """Register an account. Returns (user_id, recovery_code) on success, or
+    (None, None) if the login is already taken. If `claim_uid` is an unclaimed
+    anonymous id, it becomes the account's user_id so that browser's existing
+    bets/balance carry over. The recovery code is returned ONCE (only its hash is
+    stored)."""
+    login = _norm_login(login)
+    with _lock:
+        if _query_one("SELECT 1 FROM users WHERE login = ?", (login,)):
+            return None, None
         uid = None
         if claim_uid:
             if not _query_one("SELECT 1 FROM users WHERE user_id = ?", (claim_uid,)):
                 uid = claim_uid
         if not uid:
             uid = secrets.token_hex(16)
-        salt = secrets.token_hex(16)
-        _exec("INSERT INTO users (user_id, email, pass_hash, pass_salt, created_at) "
-              "VALUES (?,?,?,?,?)",
-              (uid, email, _hash_pw(password, salt), salt, time.time()))
+        psalt = secrets.token_hex(16)
+        code = gen_recovery_code()
+        rsalt = secrets.token_hex(16)
+        _exec("INSERT INTO users (user_id, login, pass_hash, pass_salt, "
+              "recovery_hash, recovery_salt, created_at) VALUES (?,?,?,?,?,?,?)",
+              (uid, login, _hash_secret(password, psalt), psalt,
+               _hash_secret(_norm_code(code), rsalt), rsalt, time.time()))
         _ensure_account(uid)  # guarantee a balance row (no-op if it already exists)
         _commit()
-        return uid
+        return uid, code
 
 
 @_with_retry
-def verify_login(email, password):
-    """Return the user_id if the email/password match, else None."""
-    email = (email or "").strip().lower()
+def verify_login(login, password):
+    """Return the user_id if the login/password match, else None."""
     with _lock:
         row = _query_one(
-            "SELECT user_id, pass_hash, pass_salt FROM users WHERE email = ?", (email,))
+            "SELECT user_id, pass_hash, pass_salt FROM users WHERE login = ?",
+            (_norm_login(login),))
     if not row:
         return None
-    if hmac.compare_digest(_hash_pw(password, row["pass_salt"]), row["pass_hash"]):
+    if hmac.compare_digest(_hash_secret(password, row["pass_salt"]), row["pass_hash"]):
         return row["user_id"]
     return None
+
+
+@_with_retry
+def verify_recovery(login, code):
+    """Return the user_id if the login + recovery code match, else None."""
+    with _lock:
+        row = _query_one(
+            "SELECT user_id, recovery_hash, recovery_salt FROM users WHERE login = ?",
+            (_norm_login(login),))
+    if not row or not row.get("recovery_hash"):
+        return None
+    if hmac.compare_digest(_hash_secret(_norm_code(code), row["recovery_salt"]),
+                           row["recovery_hash"]):
+        return row["user_id"]
+    return None
+
+
+@_with_retry
+def set_password(uid, new_password):
+    """Set a new password and invalidate all existing sessions for the user."""
+    salt = secrets.token_hex(16)
+    with _lock:
+        _exec("UPDATE users SET pass_hash = ?, pass_salt = ? WHERE user_id = ?",
+              (_hash_secret(new_password, salt), salt, uid))
+        _exec("DELETE FROM sessions WHERE user_id = ?", (uid,))
+        _commit()
 
 
 @_with_retry
 def get_user(uid):
     with _lock:
         return _query_one(
-            "SELECT user_id, email, created_at FROM users WHERE user_id = ?", (uid,))
+            "SELECT user_id, login, created_at FROM users WHERE user_id = ?", (uid,))
+
+
+@_with_retry
+def delete_user(uid):
+    """Permanently remove an account and ALL of its data."""
+    with _lock:
+        _exec("DELETE FROM sessions WHERE user_id = ?", (uid,))
+        _exec("DELETE FROM bets WHERE user_id = ?", (uid,))
+        _exec("DELETE FROM equity_history WHERE user_id = ?", (uid,))
+        _exec("DELETE FROM parlay_legs WHERE parlay_id IN "
+              "(SELECT id FROM parlays WHERE user_id = ?)", (uid,))
+        _exec("DELETE FROM parlays WHERE user_id = ?", (uid,))
+        _exec("DELETE FROM accounts WHERE user_id = ?", (uid,))
+        _exec("DELETE FROM users WHERE user_id = ?", (uid,))
+        _commit()
 
 
 @_with_retry

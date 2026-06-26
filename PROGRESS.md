@@ -78,12 +78,19 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   **MULTI-USER**: every visitor is an anonymous user keyed by a
   browser-generated id sent in the `X-User-Id` header. Tables: accounts, bets,
   parlays, parlay_legs, equity_history — all scoped by user_id. Get-or-create accounts.
-  **OPTIONAL ACCOUNTS (added 2026-06-26):** `users` (email, salted PBKDF2-SHA256
-  pass_hash — stdlib only, no plaintext/3rd-party) + `sessions` (token→user_id)
-  tables. Sign-up reuses the browser's current anon id as the account's user_id, so
-  existing bets carry over; logging in elsewhere returns the same user_id → data
-  syncs across devices. Functions: create_user/verify_login/get_user/create_session/
-  user_id_for_token/delete_session.
+  **OPTIONAL ACCOUNTS (added 2026-06-26, upgraded same day):** `users`
+  (`login` = username OR email [unverified — we never send email], salted
+  PBKDF2-SHA256 `pass_hash` + `recovery_hash`, stdlib only) + `sessions`
+  (token→user_id). Sign-up reuses the browser's anon id as the account's user_id so
+  existing bets carry over; logging in elsewhere returns the same user_id → syncs
+  across devices. **Recovery code** (one-time, shown once at signup, only its hash
+  stored) is how a forgotten password is reset — NO email infra (deliberate: keeps
+  the no-3rd-party rule). Login is case-insensitive. Functions: login_taken,
+  create_user (→ `(uid, code)`), verify_login, verify_recovery, set_password
+  (clears sessions), get_user, delete_user, create_session, user_id_for_token,
+  delete_session, gen_recovery_code. `init()` runs `_migrate()` which idempotently
+  renames the old `email` column → `login` and adds the recovery columns (verified
+  against live Neon).
 
 ### Frontend (vanilla JS, dark, mobile-first, PWA)
 - `index.html` — app shell: top bar (burger, brand, Cash/Equity), sticky section bar,
@@ -131,10 +138,15 @@ event], event_title) · `/api/history?ticker=&range=1H|6H|1D|1W|1M|ALL` (also
 `/api/quote?ticker=&side=&contracts=` · `GET/POST /api/bets` · `/api/bets/{id}/close` ·
 `/api/bets/{id}/force_settle` · `/api/settle` · `/api/parlays` (GET list / POST create)
 · `/api/parlays/{id}/force_settle` · `/api/account` · `/api/summary` (light: balance +
-equity) · `/api/account/reset` · `/api/analytics` · **`POST /api/auth/signup`** ·
-**`POST /api/auth/login`** (both → `{token, user_id, email}`) · **`POST /api/auth/logout`** ·
-**`GET /api/auth/me`**. The server's `_uid()` prefers a valid `X-Session-Token`
-(logged-in account) and falls back to the anonymous `X-User-Id`.
+equity) · `/api/account/reset` · `/api/analytics` · **`POST /api/auth/signup`**
+(→ `{token, user_id, login, recovery_code}`) · **`POST /api/auth/login`** ·
+**`POST /api/auth/recover`** (login+code+new password) · **`POST /api/auth/password`**
+(change pw, token) · **`POST /api/auth/delete`** (token+password) ·
+**`POST /api/auth/logout`** · **`GET /api/auth/me`**. Signup/login accept a `login`
+field (username or email). The server's `_uid()` prefers a valid `X-Session-Token`
+(logged-in account) and falls back to the anonymous `X-User-Id`. Frontend: a
+multi-panel auth modal (login/signup/recovery/show-code/account/change-pw/delete)
+in index.html + `NRB.auth` in util.js; burger → Account opens it.
 
 ## Key product decisions (already settled with the user)
 - Real Kalshi odds; demo apps that use sandbox/mock odds are useless — that's the whole
@@ -164,29 +176,35 @@ Score profile, search, light/dark, multi-user, onboarding, connection banner, re
 hardening, `/api/summary`, PWA.
 
 **Deployment:** code is deploy-ready (`Dockerfile`, `Procfile`, `runtime.txt`,
-`requirements.txt` [empty], `.gitignore`, `DEPLOY.md`, env config, `/healthz`).
+`requirements.txt` [only `psycopg2-binary`, prod/Postgres-only], `fly.toml`,
+`.gitignore`, `DEPLOY.md`, env config, `/healthz`).
 - ✅ Code pushed to GitHub: **github.com/TimothyHadfield/No_risk_Betting** (branch `main`).
   Going forward the user uses VS Code Source Control → Commit → **Sync Changes**.
 - ✅ **Optional accounts built & tested (2026-06-26)** — email+password login that
   syncs bets/balance across devices (see db.py / util.js notes above). Verified
   end-to-end against a live server (signup claims anon data, cross-device login
   returns same account, dup-email 409, wrong-password 401, logout invalidates token).
-- 🔑 **The user CANNOT spend any money** (told us 2026-06-26). So the recommended
-  deploy is **Render (free web service, NO card) + Neon (free Postgres, NO card)** —
-  data lives in Neon so Render's ephemeral disk doesn't matter. Fly.io was ruled out
-  because it requires a card on file (usage-billed → surprise-charge risk). `flyctl`
-  IS installed (`C:\Users\timha\.fly\bin\flyctl.exe`, v0.4.61) and `fly.toml` exists
-  if he ever changes his mind, but **don't push him to Fly**.
-- 🔜 NEXT STEP — finish the **Render + Neon** deploy (full walkthrough in `DEPLOY.md`
-  Option A). **What only the user can do:** create a free Neon project → copy its
-  `DATABASE_URL`; create a free Render web service from the GitHub repo (auto-detects
-  the Dockerfile) → set `DATABASE_URL` env var + Health Check Path `/healthz`. When
-  he returns, walk him through those and verify the live URL + that login syncs
-  across two browsers.
-- ⚠️ The Postgres code path is implemented but was **only tested locally via SQLite**
-  (no local PG). Once the user has a Neon `DATABASE_URL`, TEST THE PG PATH (can
-  connect to Neon from this machine with `DATABASE_URL=… python server.py` after
-  `pip install psycopg2-binary`, or just verify on the live Render URL).
+- 🔑 **The user CANNOT spend any money** (told us 2026-06-26). Deploy uses
+  **Render (free web service, NO card) + Neon (free Postgres, NO card)** — data lives
+  in Neon so Render's ephemeral disk doesn't matter. Fly.io was ruled out because it
+  requires a card on file (usage-billed → surprise-charge risk). `flyctl` IS installed
+  (`C:\Users\timha\.fly\bin\flyctl.exe`, v0.4.61) and `fly.toml` exists if he ever
+  changes his mind, but **don't push him to Fly**.
+- ✅ **DEPLOYED & LIVE (2026-06-26):** **https://no-risk-betting.onrender.com** —
+  Render web service (free) building from the Dockerfile, backed by a free **Neon**
+  Postgres DB via the `DATABASE_URL` env var. Accounts verified end-to-end on the LIVE
+  Postgres backend: signup (claims anon id), cross-device login returns the same
+  account + balance, wrong-password 401, dup-email 409, `/api/auth/me`. Render free
+  tier sleeps after ~15 min idle (first request then takes ~30–60s to wake).
+  - Deploy gotcha that bit us twice: pasting Neon's `psql 'postgresql://...'` connect
+    snippet whole into `DATABASE_URL` crashed psycopg2 (`invalid dsn: missing "="
+    after "psql"`). Fixed in code: `db._clean_db_url()` strips a leading
+    `psql `/`export `/`DATABASE_URL=` and surrounding quotes, so any snippet form works.
+  - psycopg2-binary installed locally too (for testing PG against Neon); irrelevant to
+    local runs since no `DATABASE_URL` locally → SQLite.
+- 🔜 PENDING (user action) — **the Neon DB password was exposed in chat during setup
+  and should be ROTATED:** Neon → Roles → `neondb_owner` → Reset password → update
+  `DATABASE_URL` in Render → Save (auto-redeploys). Re-verify after.
 
 ## ⚠️ The one real blocker to a PUBLIC launch (legal, not code)
 **Kalshi's Data Terms** restrict publicly displaying/redistributing their market data

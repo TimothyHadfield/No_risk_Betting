@@ -284,6 +284,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_signup(body)
         if path == "/api/auth/login":
             return self.api_login(body)
+        if path == "/api/auth/recover":
+            return self.api_recover(body)
+        if path == "/api/auth/password":
+            return self.api_change_password(body)
+        if path == "/api/auth/delete":
+            return self.api_delete_account(body)
         if path == "/api/auth/logout":
             return self.api_logout()
         if path == "/api/bets":
@@ -666,44 +672,109 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": True, "parlay": db.get_parlay(pid)})
 
     # ---- API: accounts / login (optional cross-device sync) ----
+    # Login id is a username OR email (just an unverified identifier).
     _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    _USERNAME_RE = re.compile(r"^[a-z0-9_.\-]{3,30}$")
+
+    @classmethod
+    def _validate_login(cls, raw):
+        """Return (normalized_login, error_or_None). Accepts an email or a
+        3-30 char username (letters/digits/._-)."""
+        s = (raw or "").strip().lower()
+        if not s:
+            return None, "Enter a username or email."
+        if "@" in s:
+            if not cls._EMAIL_RE.match(s):
+                return None, "Enter a valid email address."
+        elif not cls._USERNAME_RE.match(s):
+            return None, ("Username must be 3-30 characters: letters, numbers, "
+                          "and . _ - only.")
+        return s, None
+
+    def _token_uid(self):
+        return db.user_id_for_token(self.headers.get("X-Session-Token") or "")
 
     def api_signup(self, body):
-        email = (body.get("email") or "").strip().lower()
+        login, err = self._validate_login(body.get("login") or body.get("email"))
+        if err:
+            return self._send_json({"error": err}, 400)
         password = body.get("password") or ""
-        if not self._EMAIL_RE.match(email):
-            return self._send_json({"error": "Enter a valid email address."}, 400)
         if len(password) < 6:
             return self._send_json(
                 {"error": "Password must be at least 6 characters."}, 400)
         # Reuse this browser's anonymous id so the bets/balance already placed
         # carry over into the new account.
-        uid = db.create_user(email, password, claim_uid=self._anon_uid())
+        uid, code = db.create_user(login, password, claim_uid=self._anon_uid())
         if not uid:
             return self._send_json(
-                {"error": "That email is already registered — try logging in."}, 409)
+                {"error": "That username/email is already taken — try logging in."}, 409)
         token = db.create_session(uid)
-        self._send_json({"ok": True, "token": token, "user_id": uid, "email": email})
+        # recovery_code is returned exactly once for the user to save.
+        self._send_json({"ok": True, "token": token, "user_id": uid,
+                         "login": login, "recovery_code": code})
 
     def api_login(self, body):
-        email = (body.get("email") or "").strip().lower()
+        login = (body.get("login") or body.get("email") or "").strip().lower()
         password = body.get("password") or ""
-        uid = db.verify_login(email, password)
+        uid = db.verify_login(login, password)
         if not uid:
-            return self._send_json({"error": "Wrong email or password."}, 401)
+            return self._send_json({"error": "Wrong username/email or password."}, 401)
         token = db.create_session(uid)
-        self._send_json({"ok": True, "token": token, "user_id": uid, "email": email})
+        self._send_json({"ok": True, "token": token, "user_id": uid, "login": login})
+
+    def api_recover(self, body):
+        """Reset a password using the recovery code (no email needed)."""
+        login = (body.get("login") or "").strip().lower()
+        code = body.get("code") or ""
+        new_password = body.get("password") or ""
+        if len(new_password) < 6:
+            return self._send_json(
+                {"error": "New password must be at least 6 characters."}, 400)
+        uid = db.verify_recovery(login, code)
+        if not uid:
+            return self._send_json(
+                {"error": "Wrong username/email or recovery code."}, 401)
+        db.set_password(uid, new_password)  # also clears old sessions
+        token = db.create_session(uid)
+        u = db.get_user(uid)
+        self._send_json({"ok": True, "token": token, "user_id": uid,
+                         "login": u["login"] if u else login})
+
+    def api_change_password(self, body):
+        uid = self._token_uid()
+        if not uid:
+            return self._send_json({"error": "Not logged in."}, 401)
+        u = db.get_user(uid)
+        if not u or not db.verify_login(u["login"], body.get("current") or ""):
+            return self._send_json({"error": "Current password is incorrect."}, 401)
+        new_password = body.get("password") or ""
+        if len(new_password) < 6:
+            return self._send_json(
+                {"error": "New password must be at least 6 characters."}, 400)
+        db.set_password(uid, new_password)  # clears all sessions
+        token = db.create_session(uid)      # keep this device logged in
+        self._send_json({"ok": True, "token": token})
+
+    def api_delete_account(self, body):
+        uid = self._token_uid()
+        if not uid:
+            return self._send_json({"error": "Not logged in."}, 401)
+        u = db.get_user(uid)
+        if not u or not db.verify_login(u["login"], body.get("password") or ""):
+            return self._send_json({"error": "Password is incorrect."}, 401)
+        db.delete_user(uid)
+        self._send_json({"ok": True})
 
     def api_logout(self):
         db.delete_session(self.headers.get("X-Session-Token") or "")
         self._send_json({"ok": True})
 
     def api_me(self):
-        uid = db.user_id_for_token(self.headers.get("X-Session-Token") or "")
+        uid = self._token_uid()
         u = db.get_user(uid) if uid else None
         if not u:
             return self._send_json({"logged_in": False})
-        self._send_json({"logged_in": True, "email": u["email"], "user_id": uid})
+        self._send_json({"logged_in": True, "login": u["login"], "user_id": uid})
 
     def api_reset(self, body):
         uid = self._uid()

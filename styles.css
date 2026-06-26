@@ -199,12 +199,29 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 .auth-input { margin-bottom: 10px; }
 .auth-error { background: var(--no-soft); color: var(--no); border-radius: var(--radius-sm);
   font-size: 13px; padding: 8px 11px; margin-bottom: 10px; text-align: left; }
-.auth-switch { color: var(--muted); font-size: 13px; margin: 14px 0 0; }
-.auth-switch a { color: var(--accent); font-weight: 600; text-decoration: none; }
-.auth-switch a:hover { text-decoration: underline; }
+.auth-links { display: flex; justify-content: space-between; gap: 10px;
+  color: var(--muted); font-size: 13px; margin: 14px 0 0; }
+.auth-links a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.auth-links a:hover { text-decoration: underline; }
+.auth-link-secondary { color: var(--muted) !important; }
 .auth-signed { font-size: 15px; margin: 4px 0 6px; }
 .auth-signed b { color: var(--accent); }
 .auth-fine { color: var(--faint); font-size: 11px; margin: 16px 0 0; line-height: 1.5; }
+/* account panel: stack the action buttons */
+#auth-panel-account .btn, #auth-panel-code .btn { margin-top: 8px; }
+/* recovery code display */
+.auth-code-box { background: var(--bg-elev2); border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm); padding: 14px 10px; margin: 4px 0 10px; }
+.auth-code-box code { font: 700 18px/1.2 ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: .08em; color: var(--accent); word-break: break-all; }
+.auth-check { display: flex; align-items: flex-start; gap: 8px; text-align: left;
+  font-size: 12.5px; color: var(--muted); margin: 8px 0 2px; cursor: pointer; }
+.auth-check input { width: auto; flex-shrink: 0; margin-top: 1px; }
+/* destructive actions */
+.auth-danger { color: var(--no); border-color: transparent; background: none; }
+.auth-danger:hover { background: var(--no-soft); }
+.auth-danger-solid { background: var(--no); border-color: var(--no); color: #2a0508; font-weight: 700; }
+.auth-danger-solid:hover { background: var(--no); filter: brightness(1.08); }
 
 /* ---------- icons: flag emoji + monogram badge ---------- */
 .icoflag { font-size: 18px; line-height: 1; width: 22px; text-align: center; display: inline-block; }
