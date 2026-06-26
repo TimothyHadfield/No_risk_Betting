@@ -77,6 +77,12 @@
     dateShort: (iso) => { if (!iso) return "—";
       const d = new Date(iso); if (isNaN(d)) return "—";
       return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); },
+    // strip a leading emoji/symbol from a section title for a cleaner, non-juvenile look
+    title: (s) => {
+      const str = String(s == null ? "" : s);
+      try { return str.replace(/^(?:\p{Extended_Pictographic}|️|‍|⃣|\s)+/u, "").trim() || str; }
+      catch (e) { return str.replace(/^[^\w(]+/, "").trim() || str; }
+    },
   };
 
   // ---- odds ----------------------------------------------------------------
@@ -240,7 +246,7 @@
     const wrap = NRB.el(`<section class="carousel"></section>`);
     if (opts.id) wrap.id = opts.id;
     wrap.innerHTML = `<div class="carousel-head"><h3></h3></div><div class="carousel-track"></div>`;
-    wrap.querySelector("h3").textContent = title;
+    wrap.querySelector("h3").textContent = NRB.fmt.title(title);
     const track = wrap.querySelector(".carousel-track");
     (events || []).forEach((e) => track.appendChild(NRB.box(e)));
     return wrap;

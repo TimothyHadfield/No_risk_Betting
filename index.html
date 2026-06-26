@@ -29,7 +29,14 @@
     <div class="topbar-inner">
       <button class="burger" id="burger" aria-label="Menu"><span></span><span></span><span></span></button>
       <div class="brand" id="brand">
-        <span class="brand-mark">◆</span><span class="brand-name">No-Risk</span>
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="2" width="20" height="20" rx="6.5" fill="currentColor"/>
+            <path d="M6 15.2l3.4-3.6 2.6 2.4 5-5.4" stroke="#03130c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="17.4" cy="8" r="1.5" fill="#03130c"/>
+          </svg>
+        </span>
+        <span class="brand-name">No<b>·</b>Risk</span>
       </div>
       <div class="account">
         <div class="acct-stat"><label>Cash</label><span id="hdr-balance" class="tnum">—</span></div>
@@ -47,21 +54,28 @@
   <div class="drawer-overlay" id="drawer-overlay"></div>
   <aside class="drawer" id="drawer">
     <div class="drawer-head">
-      <span class="brand-mark">◆</span> <span class="brand-name">No-Risk Betting</span>
-      <div class="muted" style="font-size:12px;margin-top:2px">real odds · fake money</div>
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="6.5" fill="currentColor"/>
+          <path d="M6 15.2l3.4-3.6 2.6 2.4 5-5.4" stroke="#03130c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="17.4" cy="8" r="1.5" fill="#03130c"/>
+        </svg>
+      </span>
+      <span class="brand-name">No-Risk Betting</span>
+      <div class="drawer-tag">Real odds · fake money</div>
     </div>
-    <div class="drawer-item" data-action="home"><span class="ic">🏠</span> Home</div>
-    <div class="drawer-item" data-action="watchlist"><span class="ic">⭐</span> Watchlist</div>
-    <div class="drawer-item" data-action="community"><span class="ic">👥</span> Community</div>
-    <div class="drawer-item" data-action="activity"><span class="ic">📊</span> Your Activity</div>
-    <div class="drawer-item" data-action="profile"><span class="ic">🎯</span> Forecasting Score</div>
-    <div class="drawer-item" data-action="analytics"><span class="ic">📈</span> Analytics</div>
-    <div class="drawer-item" data-action="predict"><span class="ic">🔮</span> Predict-then-bet: <span id="predict-label">On</span></div>
-    <div class="drawer-item" data-action="theme"><span class="ic">🌓</span> Theme: <span id="theme-label">Dark</span></div>
-    <div class="drawer-item" data-action="notifications"><span class="ic">🔔</span> Notifications</div>
-    <div class="drawer-item" data-action="account"><span class="ic">👤</span> <span id="drawer-account-label">Log in / Sign up</span></div>
-    <div class="drawer-item" data-action="settings"><span class="ic">⚙️</span> Settings</div>
-    <div class="drawer-item" data-action="reset"><span class="ic">↺</span> Reset balance</div>
+    <div class="drawer-item" data-action="home"><span class="ic"><svg class="ico-svg" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg></span> Home</div>
+    <div class="drawer-item" data-action="watchlist"><span class="ic"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.9 6.2 20.9l1.1-6.47-4.7-4.58 6.5-.95z"/></svg></span> Watchlist</div>
+    <div class="drawer-item" data-action="community"><span class="ic"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Community</div>
+    <div class="drawer-item" data-action="activity"><span class="ic"><svg class="ico-svg" viewBox="0 0 24 24"><line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="9"/></svg></span> Your Activity</div>
+    <div class="drawer-item" data-action="profile"><span class="ic"><svg class="ico-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/></svg></span> Forecasting Score</div>
+    <div class="drawer-item" data-action="analytics"><span class="ic"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg></span> Analytics</div>
+    <div class="drawer-item" data-action="predict"><span class="ic"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span> Predict-then-bet: <span id="predict-label">On</span></div>
+    <div class="drawer-item" data-action="theme"><span class="ic"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span> Theme: <span id="theme-label">Dark</span></div>
+    <div class="drawer-item" data-action="notifications"><span class="ic"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span> Notifications</div>
+    <div class="drawer-item" data-action="account"><span class="ic"><svg class="ico-svg" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></span> <span id="drawer-account-label">Log in / Sign up</span></div>
+    <div class="drawer-item" data-action="settings"><span class="ic"><svg class="ico-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H3a2 2 0 0 1 0-4h.1A1.6 1.6 0 0 0 4.6 7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.1V3a2 2 0 0 1 4 0v.1A1.6 1.6 0 0 0 17 4.6l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg></span> Settings</div>
+    <div class="drawer-item" data-action="reset"><span class="ic"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg></span> Reset balance</div>
     <div class="drawer-foot">Private, personal use. Not affiliated with Kalshi.</div>
   </aside>
 
@@ -70,7 +84,13 @@
   <!-- first-run onboarding -->
   <div id="onboard" class="onboard-overlay hidden">
     <div class="onboard-box">
-      <div class="onboard-mark">◆</div>
+      <div class="onboard-mark" aria-hidden="true">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="6.5" fill="currentColor"/>
+          <path d="M6 15.2l3.4-3.6 2.6 2.4 5-5.4" stroke="#03130c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="17.4" cy="8" r="1.5" fill="#03130c"/>
+        </svg>
+      </div>
       <h2>Welcome to No-Risk Betting</h2>
       <ul class="onboard-list">
         <li><b>Real, live odds</b> from Kalshi — with <b>zero real money</b>.</li>
@@ -87,7 +107,13 @@
   <div id="auth-modal" class="auth-overlay hidden">
     <div class="auth-box">
       <button class="auth-close" id="auth-close" aria-label="Close">×</button>
-      <div class="auth-mark">◆</div>
+      <div class="auth-mark" aria-hidden="true">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="6.5" fill="currentColor"/>
+          <path d="M6 15.2l3.4-3.6 2.6 2.4 5-5.4" stroke="#03130c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="17.4" cy="8" r="1.5" fill="#03130c"/>
+        </svg>
+      </div>
       <h2 id="auth-title">Log in</h2>
       <p class="auth-sub" id="auth-sub"></p>
 

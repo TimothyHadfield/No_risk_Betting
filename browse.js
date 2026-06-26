@@ -109,7 +109,7 @@
       // section bar chips
       const secbar = $bar();
       secbar.innerHTML = rows.map((r, i) =>
-        `<button class="chip ${i === 0 ? "active" : ""}" data-target="sec-${r.key}">${NRB.fmt.esc(r.title)}</button>`
+        `<button class="chip ${i === 0 ? "active" : ""}" data-target="sec-${r.key}">${NRB.fmt.esc(NRB.fmt.title(r.title))}</button>`
       ).join("");
       secbar.querySelectorAll(".chip").forEach((c) =>
         c.addEventListener("click", () => {
