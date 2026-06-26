@@ -858,10 +858,12 @@ _FEED_COLS = ("b.id, b.ticker, b.event_ticker, b.title, b.side, b.contracts, "
 
 @_with_retry
 def public_feed(limit=50):
+    # A shared bet (b.is_public) shows in the feed by the user's display name
+    # (p.handle). Leaderboard listing (p.is_public) is a separate opt-in.
     with _lock:
         return _query(
             f"SELECT {_FEED_COLS} FROM bets b JOIN profiles p ON b.user_id = p.user_id "
-            "WHERE b.is_public = 1 AND p.is_public = 1 AND p.handle IS NOT NULL "
+            "WHERE b.is_public = 1 AND p.handle IS NOT NULL "
             "ORDER BY b.placed_at DESC LIMIT ?", (limit,))
 
 

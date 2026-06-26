@@ -10,7 +10,7 @@
   const pct = (v) => (v == null ? "—" : (v * 100).toFixed(0) + "%");
   const roiPct = (v) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%");
   const handleLink = (h) =>
-    h ? `<a class="so-handle" data-handle="${fmt.esc(h)}">@${fmt.esc(h)}</a>` : `<span class="muted">anonymous</span>`;
+    h ? `<a class="so-handle" data-handle="${fmt.esc(h)}">${fmt.esc(h)}</a>` : `<span class="muted">anonymous</span>`;
 
   // ---- a public bet card (feed + profile) ---------------------------------
   function betCard(b) {
@@ -90,15 +90,15 @@
       box.querySelector("#so-login").addEventListener("click", () => NRB.authUI.open("login"));
       return;
     }
-    if (!NRB.auth.name()) {
-      box.innerHTML = `<div class="so-need-handle muted">Pick a public handle to comment. <a id="so-go-comm">Set up profile →</a></div>`;
+    if (!NRB.auth.display()) {
+      box.innerHTML = `<div class="so-need-handle muted">Set a display name to comment. <a id="so-go-comm">Set it up →</a></div>`;
       box.querySelector("#so-go-comm").addEventListener("click", () => NRB.go("community"));
       return;
     }
     box.innerHTML = `
       <textarea id="so-input" class="so-input" rows="2" maxlength="1000" placeholder="Share your read on this market…"></textarea>
       <div class="so-composer-foot">
-        <span class="muted so-as">as @${fmt.esc(NRB.auth.name())}</span>
+        <span class="muted so-as">as ${fmt.esc(NRB.auth.display())}</span>
         <button class="btn btn-primary" id="so-post">Post</button>
       </div>`;
     const post = box.querySelector("#so-post");
@@ -213,8 +213,8 @@
           <h3>Your community profile</h3>
           ${p.handle ? `<button class="btn btn-ghost so-view-me">View public page →</button>` : ""}
         </div>
-        <label class="so-field"><span>Handle</span>
-          <input id="so-handle" maxlength="20" placeholder="e.g. SharpCaller" value="${fmt.esc(p.handle || "")}"></label>
+        <label class="so-field"><span>Display name <em class="muted">(shown to others)</em></span>
+          <input id="so-handle" maxlength="30" placeholder="e.g. Sharp Caller" value="${fmt.esc(p.handle || "")}"></label>
         <label class="so-field"><span>Bio <em class="muted">(optional)</em></span>
           <input id="so-bio" maxlength="200" placeholder="A line about your forecasting" value="${fmt.esc(p.bio || "")}"></label>
         <label class="so-check"><input type="checkbox" id="so-public" ${p.is_public ? "checked" : ""}>
@@ -235,7 +235,7 @@
           const r = await NRB.api("/api/me/profile", { method: "POST", body: { handle, bio, is_public } });
           if (r && r.ok) {
             NRB.toast("Profile saved.");
-            try { localStorage.setItem("nrb_login", localStorage.getItem("nrb_login") || ""); } catch (e) {}
+            if (r.handle != null) NRB.auth.setDisplay(r.handle);  // update header button + drawer
             if (NRB.authUI && NRB.authUI.refreshDrawer) NRB.authUI.refreshDrawer();
             this.mount(document.getElementById("view"));  // refresh
           } else { errEl.textContent = (r && r.error) || "Couldn't save."; }
@@ -329,7 +329,7 @@
           <div class="so-profile-id">
             <div class="so-avatar">${fmt.esc((p.handle || "?").slice(0, 2).toUpperCase())}</div>
             <div>
-              <h1>@${fmt.esc(p.handle)}</h1>
+              <h1>${fmt.esc(p.handle)}</h1>
               ${p.bio ? `<p class="muted">${fmt.esc(p.bio)}</p>` : ""}
             </div>
           </div>

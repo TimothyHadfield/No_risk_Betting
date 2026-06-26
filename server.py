@@ -757,9 +757,18 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": True, "parlay": db.get_parlay(pid)})
 
     # ---- API: accounts / login (optional cross-device sync) ----
-    # Login id is a username OR email (just an unverified identifier).
+    # Login id (username/email) is PRIVATE — never shown to other users. The
+    # public-facing identity is the display name (stored as the profile handle).
     _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     _USERNAME_RE = re.compile(r"^[a-z0-9_.\-]{3,30}$")
+    _DISPLAY_RE = re.compile(r"^[\w .\-]{2,30}$", re.UNICODE)
+
+    @classmethod
+    def _validate_display(cls, raw):
+        s = (raw or "").strip()
+        if not cls._DISPLAY_RE.match(s):
+            return None, "Display name must be 2-30 characters (letters, numbers, spaces)."
+        return s, None
 
     @classmethod
     def _validate_login(cls, raw):
@@ -785,20 +794,27 @@ class Handler(BaseHTTPRequestHandler):
         login, err = self._validate_login(body.get("login") or body.get("email"))
         if err:
             return self._send_json({"error": err}, 400)
+        display, derr = self._validate_display(body.get("display"))
+        if derr:
+            return self._send_json({"error": derr}, 400)
         password = body.get("password") or ""
         if len(password) < 6:
             return self._send_json(
                 {"error": "Password must be at least 6 characters."}, 400)
+        if not db.handle_available(display):
+            return self._send_json(
+                {"error": "That display name is taken — pick another."}, 409)
         # Reuse this browser's anonymous id so the bets/balance already placed
         # carry over into the new account.
         uid, code = db.create_user(login, password, claim_uid=self._anon_uid())
         if not uid:
             return self._send_json(
-                {"error": "That username/email is already taken — try logging in."}, 409)
+                {"error": "That username is already taken — try logging in."}, 409)
+        db.set_profile(uid, handle=display)  # public display name
         token = db.create_session(uid)
         # recovery_code is returned exactly once for the user to save.
         self._send_json({"ok": True, "token": token, "user_id": uid,
-                         "login": login, "recovery_code": code})
+                         "login": login, "handle": display, "recovery_code": code})
 
     def api_login(self, body):
         if self._throttled("login", 20, 300):
@@ -809,7 +825,9 @@ class Handler(BaseHTTPRequestHandler):
         if not uid:
             return self._send_json({"error": "Wrong username/email or password."}, 401)
         token = db.create_session(uid)
-        self._send_json({"ok": True, "token": token, "user_id": uid, "login": login})
+        p = db.get_profile(uid)
+        self._send_json({"ok": True, "token": token, "user_id": uid, "login": login,
+                         "handle": (p or {}).get("handle")})
 
     def api_request_reset(self, body):
         """Email a time-limited reset code to an email-based account. Always
@@ -931,13 +949,12 @@ class Handler(BaseHTTPRequestHandler):
         uid = self._require_login()
         if not uid:
             return
+        # the profile "handle" is the public DISPLAY NAME
         handle = body.get("handle")
         if handle is not None:
-            handle = handle.strip()
-            if not self._HANDLE_RE.match(handle):
-                return self._send_json(
-                    {"error": "Handle must be 3-20 characters: letters, numbers, "
-                              "underscore."}, 400)
+            handle, derr = self._validate_display(handle)
+            if derr:
+                return self._send_json({"error": derr}, 400)
         bio = body.get("bio")
         if bio is not None:
             bio = bio.strip()[:200]

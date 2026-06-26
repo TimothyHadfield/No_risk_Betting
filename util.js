@@ -302,6 +302,7 @@
   function applyLogin(r) {
     setToken(r.token);
     try { localStorage.setItem("nrb_login", r.login || ""); } catch (e) {}
+    if (r.handle != null) { try { localStorage.setItem("nrb_display", r.handle || ""); } catch (e) {} }
     // Align the anonymous fallback id with the account so views that read the
     // raw uid stay consistent while logged in.
     if (r.user_id) { try { localStorage.setItem("nrb_uid", r.user_id); } catch (e) {} }
@@ -310,14 +311,18 @@
     setToken("");
     // Drop the account identity and start a fresh anonymous session so the next
     // visitor on this browser doesn't see the account's data.
-    try { localStorage.removeItem("nrb_login"); localStorage.removeItem("nrb_uid"); } catch (e) {}
+    try { localStorage.removeItem("nrb_login"); localStorage.removeItem("nrb_display"); localStorage.removeItem("nrb_uid"); } catch (e) {}
     getUid();  // regenerate a new anonymous id
   }
   NRB.auth = {
     isLoggedIn: () => !!getToken(),
+    // username (private login id) — never shown to other users
     name: () => { try { return localStorage.getItem("nrb_login") || ""; } catch (e) { return ""; } },
-    signup: async (login, password) => {
-      const r = await NRB.api("/api/auth/signup", { method: "POST", body: { login, password } });
+    // public display name (shown to others); falls back to username if unset
+    display: () => { try { return localStorage.getItem("nrb_display") || ""; } catch (e) { return ""; } },
+    setDisplay: (d) => { try { localStorage.setItem("nrb_display", d || ""); } catch (e) {} },
+    signup: async (login, password, display) => {
+      const r = await NRB.api("/api/auth/signup", { method: "POST", body: { login, password, display } });
       if (r && r.ok) applyLogin(r);   // r also carries recovery_code (shown once)
       return r;
     },
@@ -465,7 +470,7 @@
 
     const subs = {
       login: "Log in to sync your bets across devices.",
-      signup: "Pick a username (or use an email) — it's just a login, we never email you.",
+      signup: "Username is your private login (never shown to others). Display name is what other people see.",
       recovery: "Enter your saved recovery code — or, if you used an email, request a reset code by email below.",
       account: "Your bets and balance sync to this account on any device you log in from.",
     };
@@ -477,7 +482,8 @@
         isRec = authMode === "recovery";
       show("auth-code", isRec);                       // recovery/reset code field
       show("auth-email-reset", isRec);                // "email me a reset code"
-      $("auth-login").placeholder = "Username or email";
+      show("auth-display", isSignup);                 // display name (signup only)
+      $("auth-login").placeholder = isSignup ? "Username (your private login)" : "Username or email";
       $("auth-code").placeholder = "Recovery code or emailed reset code";
       $("auth-pass").placeholder = isRec ? "New password (6+ characters)" : "Password (6+ characters)";
       $("auth-pass").autocomplete = isLogin ? "current-password" : "new-password";
@@ -492,7 +498,7 @@
         show("auth-link-secondary", false); }
     }
     if (active === "account") {
-      $("auth-login-label").textContent = NRB.auth.name() || "your account";
+      $("auth-login-label").textContent = NRB.auth.display() || NRB.auth.name() || "your account";
     }
   }
   function authOpen(mode) {
@@ -506,9 +512,34 @@
   function authClose() { const m = $("auth-modal"); if (m) m.classList.add("hidden"); }
   function goMode(mode) { authMode = mode; refreshAuthModal(); }
   function updateDrawerAuth() {
+    const loggedIn = NRB.auth.isLoggedIn();
+    const name = NRB.auth.display() || NRB.auth.name();
     const l = $("drawer-account-label");
-    if (l) l.textContent = NRB.auth.isLoggedIn() ? (NRB.auth.name() || "Account") : "Log in / Sign up";
+    if (l) l.textContent = loggedIn ? (name || "Account") : "Log in / Sign up";
+    const h = $("hdr-account");
+    if (h) {
+      h.classList.toggle("signed-out", !loggedIn);
+      if (loggedIn) {
+        const dn = name || "Account";
+        const initials = dn.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || dn.slice(0, 2).toUpperCase();
+        h.innerHTML = `<span class="hdr-acct-dot">${esc(initials)}</span><span class="hdr-acct-name">${esc(dn)}</span>`;
+      } else {
+        h.textContent = "Create account";
+      }
+    }
   }
+  // refresh display name / login from the server (keeps the header button correct
+  // across devices and after a handle change)
+  NRB.auth.sync = async function () {
+    try {
+      const r = await NRB.api("/api/auth/me");
+      if (r && r.logged_in) {
+        try { localStorage.setItem("nrb_login", r.login || ""); localStorage.setItem("nrb_display", r.handle || ""); } catch (e) {}
+      }
+      updateDrawerAuth();
+      return r;
+    } catch (e) { return null; }
+  };
   NRB.authUI = { open: authOpen, close: authClose, refreshDrawer: updateDrawerAuth };
 
   async function afterAuthChange(msg) {
@@ -523,17 +554,21 @@
     const login = ($("auth-login").value || "").trim();
     const pass = $("auth-pass").value || "";
     const code = ($("auth-code").value || "").trim();
+    const display = ($("auth-display").value || "").trim();
     if (!login || !pass || (authMode === "recovery" && !code)) {
       return setErr("auth-error", "Please fill in every field.");
+    }
+    if (authMode === "signup" && !display) {
+      return setErr("auth-error", "Choose a display name (this is what other people see).");
     }
     const btn = $("auth-submit"); btn.disabled = true;
     try {
       let r;
-      if (authMode === "signup") r = await NRB.auth.signup(login, pass);
+      if (authMode === "signup") r = await NRB.auth.signup(login, pass, display);
       else if (authMode === "recovery") r = await NRB.auth.recover(login, code, pass);
       else r = await NRB.auth.login(login, pass);
       if (r && r.ok) {
-        $("auth-pass").value = ""; $("auth-code").value = "";
+        $("auth-pass").value = ""; $("auth-code").value = ""; $("auth-display").value = "";
         updateDrawerAuth();
         if (authMode === "signup" && r.recovery_code) {
           // show the one-time recovery code before letting them continue
@@ -597,7 +632,9 @@
 
     // auth modal wiring
     updateDrawerAuth();
+    NRB.auth.sync();   // refresh display name / login from the server
     const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
+    on("hdr-account", "click", () => authOpen(NRB.auth.isLoggedIn() ? "account" : "signup"));
     on("auth-close", "click", authClose);
     const aOv = $("auth-modal");
     if (aOv) aOv.addEventListener("click", (e) => { if (e.target === aOv) authClose(); });
