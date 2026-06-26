@@ -320,6 +320,8 @@
       if (r && r.ok) applyLogin(r);
       return r;
     },
+    requestReset: async (login) =>
+      NRB.api("/api/auth/request-reset", { method: "POST", body: { login } }),
     recover: async (login, code, password) => {
       const r = await NRB.api("/api/auth/recover", { method: "POST", body: { login, code, password } });
       if (r && r.ok) applyLogin(r);
@@ -457,7 +459,7 @@
     const subs = {
       login: "Log in to sync your bets across devices.",
       signup: "Pick a username (or use an email) — it's just a login, we never email you.",
-      recovery: "Enter your login and the recovery code you saved at signup.",
+      recovery: "Enter your saved recovery code — or, if you used an email, request a reset code by email below.",
       account: "Your bets and balance sync to this account on any device you log in from.",
     };
     const sub = $("auth-sub");
@@ -466,8 +468,10 @@
     if (active === "form") {
       const isLogin = authMode === "login", isSignup = authMode === "signup",
         isRec = authMode === "recovery";
-      show("auth-code", isRec);                       // recovery-code field
+      show("auth-code", isRec);                       // recovery/reset code field
+      show("auth-email-reset", isRec);                // "email me a reset code"
       $("auth-login").placeholder = "Username or email";
+      $("auth-code").placeholder = "Recovery code or emailed reset code";
       $("auth-pass").placeholder = isRec ? "New password (6+ characters)" : "Password (6+ characters)";
       $("auth-pass").autocomplete = isLogin ? "current-password" : "new-password";
       $("auth-submit").textContent = isSignup ? "Create account" : isRec ? "Reset password" : "Log in";
@@ -597,6 +601,18 @@
     const linkGo = (e) => { e.preventDefault(); goMode(e.currentTarget.dataset.go || "login"); };
     on("auth-link-primary", "click", linkGo);
     on("auth-link-secondary", "click", linkGo);
+    on("auth-send-code", "click", async () => {
+      const login = ($("auth-login").value || "").trim();
+      if (!login) return setErr("auth-error", "Enter your email above first.");
+      const btn = $("auth-send-code"); btn.disabled = true;
+      try {
+        const r = await NRB.auth.requestReset(login);
+        if (r && r.ok) { setErr("auth-error", "");
+          NRB.toast("If that email has an account, a reset code is on its way."); }
+        else setErr("auth-error", (r && r.error) || "Couldn't send the email.");
+      } catch (e) { setErr("auth-error", "Can't reach the server."); }
+      finally { btn.disabled = false; }
+    });
     // recovery-code panel
     on("auth-code-ack", "change", (e) => { $("auth-code-done").disabled = !e.currentTarget.checked; });
     on("auth-code-copy", "click", async () => {

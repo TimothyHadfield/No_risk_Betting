@@ -245,6 +245,9 @@ def init(db_path=DB_PATH):
             pass_salt      TEXT NOT NULL,
             recovery_hash  TEXT,
             recovery_salt  TEXT,
+            reset_hash     TEXT,
+            reset_salt     TEXT,
+            reset_expires  {num},
             created_at     {num} NOT NULL
         );
 
@@ -292,10 +295,14 @@ def _migrate():
         _exec("ALTER TABLE users RENAME COLUMN email TO login")
         _commit()
         cols = _table_columns("users")
-    for col in ("recovery_hash", "recovery_salt"):
+    for col in ("recovery_hash", "recovery_salt", "reset_hash", "reset_salt"):
         if col not in cols:
             _exec(f"ALTER TABLE users ADD COLUMN {col} TEXT")
             _commit()
+    if "reset_expires" not in cols:
+        num = "DOUBLE PRECISION" if USE_PG else "REAL"
+        _exec(f"ALTER TABLE users ADD COLUMN reset_expires {num}")
+        _commit()
 
 
 # ---- account -------------------------------------------------------------
@@ -384,6 +391,13 @@ def gen_recovery_code():
     return "NRB-" + "-".join(groups)
 
 
+def gen_reset_code():
+    """Shorter, time-limited code emailed for password reset (e.g. K7P2-9QXM)."""
+    groups = ["".join(secrets.choice(_RECOVERY_ALPHABET) for _ in range(4))
+              for _ in range(2)]
+    return "-".join(groups)
+
+
 @_with_retry
 def login_taken(login):
     with _lock:
@@ -451,13 +465,60 @@ def verify_recovery(login, code):
 
 @_with_retry
 def set_password(uid, new_password):
-    """Set a new password and invalidate all existing sessions for the user."""
+    """Set a new password, clear any pending reset code, and invalidate all
+    existing sessions for the user."""
     salt = secrets.token_hex(16)
     with _lock:
-        _exec("UPDATE users SET pass_hash = ?, pass_salt = ? WHERE user_id = ?",
+        _exec("UPDATE users SET pass_hash = ?, pass_salt = ?, reset_hash = NULL, "
+              "reset_salt = NULL, reset_expires = NULL WHERE user_id = ?",
               (_hash_secret(new_password, salt), salt, uid))
         _exec("DELETE FROM sessions WHERE user_id = ?", (uid,))
         _commit()
+
+
+@_with_retry
+def user_id_by_login(login):
+    with _lock:
+        row = _query_one("SELECT user_id FROM users WHERE login = ?",
+                         (_norm_login(login),))
+        return row["user_id"] if row else None
+
+
+@_with_retry
+def set_reset_code(uid, ttl_seconds=1800):
+    """Generate a time-limited password-reset code, store only its hash, and
+    return the plaintext code (to be emailed)."""
+    code = gen_reset_code()
+    salt = secrets.token_hex(16)
+    with _lock:
+        _exec("UPDATE users SET reset_hash = ?, reset_salt = ?, reset_expires = ? "
+              "WHERE user_id = ?",
+              (_hash_secret(_norm_code(code), salt), salt,
+               time.time() + ttl_seconds, uid))
+        _commit()
+    return code
+
+
+@_with_retry
+def verify_reset_code(login, code):
+    """Return the user_id if the emailed reset code matches and hasn't expired."""
+    with _lock:
+        row = _query_one(
+            "SELECT user_id, reset_hash, reset_salt, reset_expires FROM users "
+            "WHERE login = ?", (_norm_login(login),))
+    if not row or not row.get("reset_hash") or not row.get("reset_expires"):
+        return None
+    if float(row["reset_expires"]) < time.time():
+        return None
+    if hmac.compare_digest(_hash_secret(_norm_code(code), row["reset_salt"]),
+                           row["reset_hash"]):
+        return row["user_id"]
+    return None
+
+
+def verify_recovery_or_reset(login, code):
+    """Accept either the permanent recovery code or a valid emailed reset code."""
+    return verify_recovery(login, code) or verify_reset_code(login, code)
 
 
 @_with_retry

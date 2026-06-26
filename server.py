@@ -25,6 +25,7 @@ import db
 import fills
 import analytics
 import espn
+import mailer
 
 # Config from environment (so hosts like Render/Railway/Fly/Heroku just work).
 HOST = os.environ.get("HOST", "0.0.0.0")
@@ -284,6 +285,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_signup(body)
         if path == "/api/auth/login":
             return self.api_login(body)
+        if path == "/api/auth/request-reset":
+            return self.api_request_reset(body)
         if path == "/api/auth/recover":
             return self.api_recover(body)
         if path == "/api/auth/password":
@@ -722,18 +725,40 @@ class Handler(BaseHTTPRequestHandler):
         token = db.create_session(uid)
         self._send_json({"ok": True, "token": token, "user_id": uid, "login": login})
 
+    def api_request_reset(self, body):
+        """Email a time-limited reset code to an email-based account. Always
+        responds generically so it never reveals whether an email is registered."""
+        login = (body.get("login") or "").strip().lower()
+        if "@" not in login or not self._EMAIL_RE.match(login):
+            return self._send_json(
+                {"error": "Enter the email address you signed up with."}, 400)
+        if not mailer.is_configured():
+            return self._send_json(
+                {"error": "Email isn't set up on this server yet."}, 503)
+        uid = db.user_id_by_login(login)
+        if uid:
+            code = db.set_reset_code(uid)
+            try:
+                mailer.send_reset_code(login, code)
+            except Exception as e:
+                print("reset email error:", e)
+                return self._send_json(
+                    {"error": "Couldn't send the email. Try again shortly."}, 502)
+        self._send_json({"ok": True})
+
     def api_recover(self, body):
-        """Reset a password using the recovery code (no email needed)."""
+        """Reset a password using either the saved recovery code or an emailed
+        reset code."""
         login = (body.get("login") or "").strip().lower()
         code = body.get("code") or ""
         new_password = body.get("password") or ""
         if len(new_password) < 6:
             return self._send_json(
                 {"error": "New password must be at least 6 characters."}, 400)
-        uid = db.verify_recovery(login, code)
+        uid = db.verify_recovery_or_reset(login, code)
         if not uid:
             return self._send_json(
-                {"error": "Wrong username/email or recovery code."}, 401)
+                {"error": "Wrong username/email or code."}, 401)
         db.set_password(uid, new_password)  # also clears old sessions
         token = db.create_session(uid)
         u = db.get_user(uid)

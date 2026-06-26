@@ -94,6 +94,10 @@
         <input id="auth-login" class="auth-input" type="text" placeholder="Username or email" autocomplete="username" autocapitalize="none" spellcheck="false">
         <input id="auth-code" class="auth-input hidden" type="text" placeholder="Recovery code (NRB-XXXX-XXXX-XXXX)" autocapitalize="characters" spellcheck="false">
         <input id="auth-pass" class="auth-input" type="password" placeholder="Password (6+ characters)" autocomplete="current-password">
+        <div id="auth-email-reset" class="auth-emailreset hidden">
+          <button id="auth-send-code" class="auth-linkbtn" type="button">📧 Email me a reset code</button>
+          <span class="auth-emailreset-hint">if you signed up with an email</span>
+        </div>
         <div id="auth-error" class="auth-error hidden"></div>
         <button id="auth-submit" class="btn btn-primary btn-block">Log in</button>
         <p class="auth-links">

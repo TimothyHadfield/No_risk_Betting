@@ -60,6 +60,14 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   retry/backoff. Holds the in-memory **events cache** (refreshed every 90s) and a
   `FEATURED_SERIES` list (World Cup + major leagues) merged in because the default feed
   buries them. Attaches a `logo` to each sports market via espn.logo_for.
+- `mailer.py` — **stdlib-only SMTP sender** (added 2026-06-26) for the optional
+  **email-based password reset**. No third-party SDK — relays through an ordinary
+  mailbox (Gmail) via `smtplib`. Configured by env vars: `SMTP_USER` + `SMTP_PASS`
+  (Gmail **app password**; required to send), `SMTP_HOST` (default smtp.gmail.com),
+  `SMTP_PORT` (default 465 SSL; 587 for STARTTLS), `SMTP_FROM`, `APP_NAME`.
+  `is_configured()` is False when creds absent → the app just doesn't offer email
+  reset (recovery code still works). **User must set SMTP_USER/SMTP_PASS in Render**
+  for email reset to work live; verify after they do.
 - `espn.py` — ESPN public adapter (unofficial endpoints) for **live scores/clock** and
   **team logos** (Kalshi has neither). Matches a Kalshi game to an ESPN game by team
   names (with normalization + alias map). `game_state()` and `logo_for()`.
@@ -140,7 +148,9 @@ event], event_title) · `/api/history?ticker=&range=1H|6H|1D|1W|1M|ALL` (also
 · `/api/parlays/{id}/force_settle` · `/api/account` · `/api/summary` (light: balance +
 equity) · `/api/account/reset` · `/api/analytics` · **`POST /api/auth/signup`**
 (→ `{token, user_id, login, recovery_code}`) · **`POST /api/auth/login`** ·
-**`POST /api/auth/recover`** (login+code+new password) · **`POST /api/auth/password`**
+**`POST /api/auth/request-reset`** (email a time-limited reset code; needs SMTP env
+configured, else 503) · **`POST /api/auth/recover`** (login+code+new password —
+accepts the permanent recovery code OR the emailed reset code) · **`POST /api/auth/password`**
 (change pw, token) · **`POST /api/auth/delete`** (token+password) ·
 **`POST /api/auth/logout`** · **`GET /api/auth/me`**. Signup/login accept a `login`
 field (username or email). The server's `_uid()` prefers a valid `X-Session-Token`
@@ -202,9 +212,8 @@ hardening, `/api/summary`, PWA.
     `psql `/`export `/`DATABASE_URL=` and surrounding quotes, so any snippet form works.
   - psycopg2-binary installed locally too (for testing PG against Neon); irrelevant to
     local runs since no `DATABASE_URL` locally → SQLite.
-- 🔜 PENDING (user action) — **the Neon DB password was exposed in chat during setup
-  and should be ROTATED:** Neon → Roles → `neondb_owner` → Reset password → update
-  `DATABASE_URL` in Render → Save (auto-redeploys). Re-verify after.
+- Neon password: was shared during setup but the user has **explicitly decided not to
+  rotate it** (will delete the chat; not concerned). **Do NOT keep flagging this.**
 
 ## ⚠️ The one real blocker to a PUBLIC launch (legal, not code)
 **Kalshi's Data Terms** restrict publicly displaying/redistributing their market data
