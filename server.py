@@ -743,7 +743,8 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 print("reset email error:", e)
                 return self._send_json(
-                    {"error": "Couldn't send the email. Try again shortly."}, 502)
+                    {"error": "Couldn't send the email. Try again shortly.",
+                     "detail": f"{type(e).__name__}: {e}"}, 502)
         self._send_json({"ok": True})
 
     def api_recover(self, body):
