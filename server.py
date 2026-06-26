@@ -46,6 +46,30 @@ _mkt_lock = threading.Lock()
 _mkt_cache = {}  # ticker -> (normalized_market, fetched_at)
 _MKT_TTL = 15.0
 
+# Best-effort in-memory rate limiting for auth endpoints (single instance on the
+# free tier, so a dict is fine; it just resets on restart).
+_rl_lock = threading.Lock()
+_rl_hits = {}  # key -> [timestamps within window]
+
+
+def _rate_ok(key, limit, window):
+    """True if this hit is allowed; False once `key` exceeds `limit` hits in the
+    last `window` seconds."""
+    now = time.time()
+    with _rl_lock:
+        hits = [t for t in _rl_hits.get(key, ()) if now - t < window]
+        if len(hits) >= limit:
+            _rl_hits[key] = hits
+            return False
+        hits.append(now)
+        _rl_hits[key] = hits
+        # opportunistic cleanup so the dict can't grow unbounded
+        if len(_rl_hits) > 5000:
+            for k in [k for k, v in _rl_hits.items()
+                      if not any(now - t < window for t in v)]:
+                _rl_hits.pop(k, None)
+        return True
+
 
 def _clamp_prob(v):
     """Validate an optional user forecast probability (0..1). Returns None if absent/invalid."""
@@ -321,6 +345,23 @@ class Handler(BaseHTTPRequestHandler):
             return int(path[len("/api/bets/"):-len(suffix)])
         except ValueError:
             return -1
+
+    def _client_ip(self):
+        """Best-effort client IP (Render/Proxies put the real one in XFF)."""
+        xff = self.headers.get("X-Forwarded-For") or ""
+        if xff:
+            return xff.split(",")[0].strip()
+        return self.client_address[0] if self.client_address else "?"
+
+    def _throttled(self, bucket, limit, window):
+        """If the client IP exceeds the limit for `bucket`, send 429 and return
+        True (caller should return immediately)."""
+        if not _rate_ok(f"{bucket}:{self._client_ip()}", limit, window):
+            self._send_json(
+                {"error": "Too many attempts. Please wait a few minutes and try again."},
+                429)
+            return True
+        return False
 
     def _anon_uid(self):
         """The raw per-browser id from the X-User-Id header (no session)."""
@@ -698,6 +739,8 @@ class Handler(BaseHTTPRequestHandler):
         return db.user_id_for_token(self.headers.get("X-Session-Token") or "")
 
     def api_signup(self, body):
+        if self._throttled("signup", 10, 600):
+            return
         login, err = self._validate_login(body.get("login") or body.get("email"))
         if err:
             return self._send_json({"error": err}, 400)
@@ -717,6 +760,8 @@ class Handler(BaseHTTPRequestHandler):
                          "login": login, "recovery_code": code})
 
     def api_login(self, body):
+        if self._throttled("login", 20, 300):
+            return
         login = (body.get("login") or body.get("email") or "").strip().lower()
         password = body.get("password") or ""
         uid = db.verify_login(login, password)
@@ -728,6 +773,8 @@ class Handler(BaseHTTPRequestHandler):
     def api_request_reset(self, body):
         """Email a time-limited reset code to an email-based account. Always
         responds generically so it never reveals whether an email is registered."""
+        if self._throttled("reqreset", 5, 3600):  # per-IP: cap email-send abuse
+            return
         login = (body.get("login") or "").strip().lower()
         if "@" not in login or not self._EMAIL_RE.match(login):
             return self._send_json(
@@ -735,6 +782,9 @@ class Handler(BaseHTTPRequestHandler):
         if not mailer.is_configured():
             return self._send_json(
                 {"error": "Email isn't set up on this server yet."}, 503)
+        # per-recipient cap: don't let anyone flood one inbox / spend the quota
+        if not _rate_ok("reqreset-to:" + login, 3, 3600):
+            return self._send_json({"ok": True})  # silent: no leak, no send
         uid = db.user_id_by_login(login)
         if uid:
             code = db.set_reset_code(uid)
@@ -749,6 +799,8 @@ class Handler(BaseHTTPRequestHandler):
     def api_recover(self, body):
         """Reset a password using either the saved recovery code or an emailed
         reset code."""
+        if self._throttled("recover", 20, 300):  # brute-force guard on codes
+            return
         login = (body.get("login") or "").strip().lower()
         code = body.get("code") or ""
         new_password = body.get("password") or ""
