@@ -77,6 +77,30 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
 - `espn.py` — ESPN public adapter (unofficial endpoints) for **live scores/clock** and
   **team logos** (Kalshi has neither). Matches a Kalshi game to an ESPN game by team
   names (with normalization + alias map). `game_state()` and `logo_for()`.
+- **SOCIAL LAYER (added & live 2026-06-26):** `db.py` tables `profiles`
+  (user_id, unique handle/handle_lc, bio, is_public), `comments` (thread, body,
+  status), `reactions` (unique per user/target/kind), `reports`; plus `bets.is_public`
+  (migrated). Privacy rule: **only `handle`/`bio` are ever exposed publicly** — never
+  email/login/user_id. `server.py` endpoints: `GET/POST /api/me/profile`,
+  `GET /api/u/{handle}`, `GET /api/leaderboard` (30s cache; ranks public profiles by
+  ROI/Brier/win-rate via analytics.summary), `GET /api/feed`, `GET /api/comments` +
+  `POST /api/comments` (+`/{id}/delete`, `/{id}/report`), `POST /api/reactions`,
+  `POST /api/bets/{id}/public` (share toggle). Moderation: per-user/admin delete,
+  reports, tiny slur blocklist, all rate-limited; `ADMIN_HANDLES` env lists
+  moderators. Frontend `social.js`/`social.css`: **Community** page (profile editor +
+  leaderboard + live feed), public profile view (`NRB.views.user`), a reusable
+  comments thread mounted on every market-detail page (thread = `mkt:<event_ticker>`),
+  like buttons, and a **Share** toggle in the portfolio. `delete_user` cascades to
+  social rows (no orphans). Commenting requires a public handle.
+- **DESIGN OVERHAUL pass 1 (2026-06-26):** refined dark tokens (deeper neutrals, one
+  emerald accent `--accent`, `--accent-ink`/`--accent-soft`/`--ring`, layered
+  shadows), tighter heading typography, polished chrome (translucent top/section bars
+  via color-mix, buttons, cards, inputs/textarea, market-box hover). Replaced **all
+  emoji chrome** with an inline-SVG icon set (`.ico-svg`): new chart-on-square brand
+  mark in top bar/drawer/onboarding/auth modal, line icons for every drawer item.
+  `NRB.fmt.title()` strips leading emoji from dynamic Kalshi section titles so
+  carousel headers/chips read clean. NOTE: this was pass 1 (chrome + tokens + icons);
+  per-view polish (detail/portfolio/profile/analytics density) is a good next pass.
 - `fills.py` — order-book-walk fill simulation + Kalshi fee (0.07*C*P*(1-P)).
 - `analytics.py` — Brier score, log-loss, calibration buckets, per-category skill
   (`by_category`), recent W/L streak, and **predict-then-bet** you-vs-market stats
