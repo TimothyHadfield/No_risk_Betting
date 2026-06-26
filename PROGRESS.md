@@ -60,14 +60,20 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   retry/backoff. Holds the in-memory **events cache** (refreshed every 90s) and a
   `FEATURED_SERIES` list (World Cup + major leagues) merged in because the default feed
   buries them. Attaches a `logo` to each sports market via espn.logo_for.
-- `mailer.py` — **stdlib-only SMTP sender** (added 2026-06-26) for the optional
-  **email-based password reset**. No third-party SDK — relays through an ordinary
-  mailbox (Gmail) via `smtplib`. Configured by env vars: `SMTP_USER` + `SMTP_PASS`
-  (Gmail **app password**; required to send), `SMTP_HOST` (default smtp.gmail.com),
-  `SMTP_PORT` (default 465 SSL; 587 for STARTTLS), `SMTP_FROM`, `APP_NAME`.
-  `is_configured()` is False when creds absent → the app just doesn't offer email
-  reset (recovery code still works). **User must set SMTP_USER/SMTP_PASS in Render**
-  for email reset to work live; verify after they do.
+- `mailer.py` — **stdlib-only email sender** (added 2026-06-26) for the optional
+  **email-based password reset**. Two transports, no third-party SDK:
+  - **Brevo HTTP API (LIVE in production)** — `urllib` HTTPS POST. Used because
+    **⚠️ Render BLOCKS outbound SMTP ports** (Gmail SMTP failed with `OSError 101
+    Network is unreachable`); HTTPS works. Env: `BREVO_API_KEY` + `BREVO_SENDER`
+    (a Brevo-validated sender email — no domain needed). **Configured in Render**
+    with the project's `noriskbetting4@gmail.com` Brevo account; **email reset is
+    confirmed working end-to-end (2026-06-26).** Brevo free = 300 emails/day, no card.
+  - **SMTP via smtplib (fallback)** for hosts that allow it (local/Fly): `SMTP_USER`
+    + `SMTP_PASS` (app password), `SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM`. Don't use on
+    Render — it's blocked.
+  `is_configured()` False when neither set → app just doesn't offer email reset
+  (recovery code still works). Reset emails come from "No-Risk Betting
+  <noriskbetting4@gmail.com>"; brand-new sender → may land in spam at first.
 - `espn.py` — ESPN public adapter (unofficial endpoints) for **live scores/clock** and
   **team logos** (Kalshi has neither). Matches a Kalshi game to an ESPN game by team
   names (with normalization + alias map). `game_state()` and `logo_for()`.
