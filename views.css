@@ -1,0 +1,270 @@
+/* ============================================================
+   Portfolio (.pf-*) + Analytics (.an-*) view styles — v2 DARK.
+   Owned by Portfolio/Analytics agent. Shared atoms live in styles.css.
+   ============================================================ */
+
+/* ---------- shared: summary strip ---------- */
+.pf-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 18px 22px;
+  margin-bottom: 14px;
+}
+.pf-sum-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 120px;
+  padding-right: 22px;
+  border-right: 1px solid var(--border);
+}
+.pf-sum-item:last-child { border-right: none; padding-right: 0; }
+.pf-sum-item label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); font-weight: 700;
+}
+.pf-sum-item span { font-size: 22px; font-weight: 700; color: var(--text); }
+
+.pf-section { padding: 0 4px; margin: 18px 0 10px; }
+
+/* ---------- tables ---------- */
+.pf-tablecard { padding: 4px 6px; overflow: hidden; }
+.pf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.pf-table th {
+  text-align: left;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.pf-table th.tnum, .pf-table td.tnum { text-align: right; }
+.pf-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  color: var(--text);
+}
+.pf-table tbody tr:last-child td { border-bottom: none; }
+.pf-table tbody tr:hover { background: var(--bg-elev2); }
+
+/* ---------- title cell: icon + clickable link + flags ---------- */
+.pf-title-cell { max-width: 320px; }
+.pf-title-row { display: flex; align-items: center; gap: 9px; }
+.pf-link {
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pf-link:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ---------- odds cell: multiplier (accent) + probability (muted) ---------- */
+.pf-odds {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+.pf-mult { font-weight: 800; color: var(--accent); font-size: 14px; }
+.pf-prob { font-size: 11.5px; }
+
+/* ---------- outcome chip ---------- */
+.pf-outcome {
+  display: inline-block;
+  font-size: 11px; font-weight: 800; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em;
+  padding: 3px 9px; border-radius: var(--radius-pill);
+  background: var(--bg-elev2); border: 1px solid var(--border);
+}
+.pf-outcome.sold { color: var(--muted); }
+.pf-outcome.settled { color: var(--text); }
+
+.pf-actions { text-align: right; white-space: nowrap; }
+.pf-actions .btn { padding: 6px 11px; font-size: 13px; margin-left: 6px; }
+
+/* ---------- amber flags (partial / estimated fill) ---------- */
+.pf-flag {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: rgba(231, 184, 80, .14);
+  color: var(--gold);
+  border: 1px solid rgba(231, 184, 80, .35);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* ---------- empty states ---------- */
+.pf-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 40px 22px;
+  text-align: center;
+}
+.pf-empty p { margin: 0; font-size: 15px; }
+
+/* ---------- parlays ---------- */
+.pf-parlay-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+.pf-parlay {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pf-parlay-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pf-parlay-title {
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pf-parlay-mult {
+  font-weight: 800;
+  color: var(--accent);
+  font-size: 14px;
+}
+.pf-parlay-result {
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .04em; padding: 2px 8px; border-radius: var(--radius-pill);
+}
+.pf-parlay-result.pos { background: var(--yes-soft); }
+.pf-parlay-result.neg { background: var(--no-soft); }
+.pf-parlay-meta { font-size: 12.5px; }
+
+.pf-legs { display: flex; flex-direction: column; gap: 2px; }
+.pf-leg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.pf-leg-lost { opacity: .62; }
+.pf-leg-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.pf-leg-name {
+  font-weight: 600;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pf-leg-sub {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+}
+.pf-leg-mult {
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--accent);
+  margin-left: auto;
+}
+.pf-leg-chip {
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  min-width: 46px;
+  text-align: right;
+}
+.pf-parlay-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.pf-parlay-state { font-size: 13px; font-weight: 700; }
+.pf-parlay-foot .btn { padding: 6px 11px; font-size: 13px; }
+
+/* ---------- analytics: metric cards ---------- */
+.an-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 6px;
+}
+.an-metric {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 96px;
+}
+.an-metric-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); font-weight: 700;
+}
+.an-metric-value {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.05;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.an-metric-hint { font-size: 11.5px; line-height: 1.35; margin-top: auto; }
+
+/* ---------- analytics: charts ---------- */
+.an-chartcard { padding: 18px 20px; margin-bottom: 6px; }
+.an-explain { margin: 0 0 14px; font-size: 13px; line-height: 1.45; max-width: 640px; }
+.an-chartwrap { position: relative; height: 320px; }
+
+/* section spacing within analytics */
+.an .section-title { margin: 20px 0 10px; padding: 0 4px; }
+.an .section-title:first-child { margin-top: 4px; }
+
+@media (max-width: 720px) {
+  .an-metrics { grid-template-columns: repeat(2, 1fr); }
+  .an-metric-value { font-size: 26px; }
+  .an-chartwrap { height: 260px; }
+  .pf-summary { gap: 10px; }
+  .pf-sum-item { min-width: 90px; padding-right: 14px; }
+  .pf-sum-item span { font-size: 18px; }
+  /* let wide tables scroll horizontally on small screens */
+  .pf-tablecard { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .pf-table { min-width: 600px; }
+}
+@media (max-width: 460px) {
+  .an-metrics { grid-template-columns: 1fr 1fr; }
+}

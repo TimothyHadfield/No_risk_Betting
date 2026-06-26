@@ -1,0 +1,170 @@
+/* ============================================================
+   Forecasting Score / Profile view. Owns ONLY .prof-* classes.
+   Dark tokens from styles.css. Mobile-first, responsive.
+   (Do NOT use .pf-* — that's the portfolio view.)
+   ============================================================ */
+
+.prof { padding: 4px 14px 0; }
+
+/* ---------- header ---------- */
+.prof-head { margin: 6px 0 16px; }
+.prof-title { font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.prof-sub { margin: 6px 0 0; font-size: 14px; line-height: 1.5; max-width: 640px; }
+.prof-sub strong { color: var(--text); }
+
+.prof-sec { margin: 22px 0 10px; }
+
+/* ---------- hero (Brier) ---------- */
+.prof-hero { padding: 18px 18px 20px; }
+.prof-hero-loading { padding: 14px; }
+.prof-hero-cap { margin-bottom: 6px; }
+.prof-hero-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.prof-hero-big {
+  font-size: 56px; font-weight: 800; line-height: 1; letter-spacing: -.03em; color: var(--text);
+}
+.prof-hero-read { font-size: 13.5px; margin-top: 8px; }
+.prof-hero-meta { font-size: 12px; margin-top: 12px; }
+
+/* qualitative tag */
+.prof-tag {
+  display: inline-block; font: 700 12px var(--font); padding: 4px 11px;
+  border-radius: var(--radius-pill); text-transform: uppercase; letter-spacing: .04em;
+  border: 1px solid transparent;
+}
+.prof-tag-sharp { background: var(--yes-soft); color: var(--yes); border-color: rgba(39,209,139,.3); }
+.prof-tag-decent { background: rgba(231,184,80,.14); color: var(--gold); border-color: rgba(231,184,80,.3); }
+.prof-tag-weak { background: var(--no-soft); color: var(--no); border-color: rgba(251,90,106,.3); }
+
+/* hero scale bar: 0 (perfect, right) -> 0.5 (coin-flip-ish, left) */
+.prof-hero-scale { position: relative; margin: 14px 0 2px; height: 8px; }
+.prof-hero-scalebar {
+  position: absolute; inset: 0; border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--no) 0%, var(--gold) 50%, var(--accent) 100%);
+  opacity: .85;
+}
+.prof-hero-marker {
+  position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--text); border: 2px solid var(--bg-elev);
+  transform: translate(-50%, -50%); box-shadow: 0 0 0 1px rgba(0,0,0,.4);
+}
+
+/* hero empty state */
+.prof-hero-empty { text-align: center; padding: 30px 18px 26px; }
+.prof-hero-emoji { font-size: 40px; line-height: 1; margin-bottom: 8px; }
+.prof-hero-empty .prof-hero-big { font-size: 26px; margin-bottom: 8px; }
+.prof-hero-empty .prof-hero-read { max-width: 380px; margin: 0 auto 18px; }
+
+/* ---------- metric grid (reality check) ---------- */
+.prof-reality { padding: 14px; }
+.prof-metrics {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+}
+.prof-metric {
+  display: flex; flex-direction: column; gap: 4px; padding: 14px;
+  background: var(--bg-elev2); border-color: var(--border); box-shadow: none;
+}
+.prof-metric-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted);
+}
+.prof-metric-value { font-size: 24px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+.prof-metric-hint { font-size: 11px; line-height: 1.35; margin-top: auto; }
+
+.prof-note { font-size: 12.5px; line-height: 1.5; margin: 10px 2px 0; max-width: 640px; }
+
+/* ---------- recent form ---------- */
+.prof-form { padding: 14px; }
+.prof-form-empty { font-size: 13.5px; }
+.prof-streak { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+.prof-streak-num { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+.prof-streak-lbl { font-size: 13px; text-transform: capitalize; }
+.prof-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.prof-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 6px; font: 800 12px var(--font);
+  font-variant-numeric: tabular-nums;
+}
+.prof-chip-w { background: var(--yes-soft); color: var(--yes); }
+.prof-chip-l { background: var(--no-soft); color: var(--no); }
+
+/* ---------- charts ---------- */
+.prof-chartcard { padding: 14px; }
+.prof-chartwrap { position: relative; height: 320px; }
+.prof-chartwrap-sm { height: 230px; }
+.prof-explain { font-size: 12.5px; line-height: 1.5; margin: 12px 2px 0; }
+
+/* ---------- skill by category ---------- */
+.prof-best-banner {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  background: var(--yes-soft); border: 1px solid rgba(39,209,139,.25);
+  border-radius: var(--radius-sm); padding: 9px 13px; margin-bottom: 10px;
+}
+.prof-best-banner strong { color: var(--accent); }
+.prof-cats { padding: 4px 4px; overflow: hidden; }
+.prof-cats-empty { padding: 16px; font-size: 13.5px; }
+.prof-cat-row {
+  display: grid;
+  grid-template-columns: minmax(0,1.6fr) .6fr .8fr .8fr 1fr 1.1fr;
+  align-items: center; gap: 8px; padding: 11px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.prof-cat-row:last-child { border-bottom: none; }
+.prof-cat-headrow {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--muted);
+}
+.prof-cat-headrow > div { color: var(--muted) !important; }
+.prof-cat-best { background: var(--yes-soft); border-radius: var(--radius-sm); }
+.prof-cat-name {
+  font-size: 13.5px; font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 5px;
+}
+.prof-cat-star { color: var(--gold); flex-shrink: 0; }
+.prof-cat-n, .prof-cat-win, .prof-cat-brier, .prof-cat-pnl { text-align: right; font-size: 13px; }
+.prof-cat-tag { text-align: right; }
+.prof-cat-headrow .prof-cat-n,
+.prof-cat-headrow .prof-cat-win,
+.prof-cat-headrow .prof-cat-brier,
+.prof-cat-headrow .prof-cat-pnl,
+.prof-cat-headrow .prof-cat-tag { text-align: right; }
+.prof-cat-tag .prof-tag { font-size: 10px; padding: 3px 8px; }
+
+/* ---------- you vs the market ---------- */
+.prof-vs-hint { font-size: 12.5px; line-height: 1.5; margin: 18px 2px 0; max-width: 640px; }
+.prof-vs { padding: 16px; }
+.prof-vs-briers { display: flex; align-items: center; gap: 16px; }
+.prof-vs-brier { flex: 1; text-align: center; }
+.prof-vs-brier-lbl {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+}
+.prof-vs-brier-val { font-size: 34px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; margin-top: 2px; }
+.prof-vs-sep { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; flex: 0 0 auto; }
+.prof-vs-verdict { font-size: 16px; font-weight: 800; letter-spacing: -.01em; text-align: center; margin: 14px 0 4px; }
+.prof-vs-beat { font-size: 13px; text-align: center; }
+.prof-vs-beat strong { color: var(--text); }
+
+.prof-value { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+.prof-value-head { margin-bottom: 8px; }
+.prof-value-row {
+  display: grid; grid-template-columns: 1fr auto auto; align-items: baseline;
+  gap: 10px; padding: 7px 0;
+}
+.prof-value-lbl { font-size: 13px; font-weight: 600; }
+.prof-value-roi { font-size: 16px; font-weight: 800; text-align: right; min-width: 64px; }
+.prof-value-meta { font-size: 11.5px; text-align: right; min-width: 40px; }
+
+/* ---------- responsive: 4->2->1 metric grid; condensed table ---------- */
+@media (max-width: 720px) {
+  .prof-metrics { grid-template-columns: repeat(2, 1fr); }
+  .prof-metric-value { font-size: 22px; }
+  .prof-hero-big { font-size: 48px; }
+  .prof-chartwrap { height: 280px; }
+}
+@media (max-width: 460px) {
+  .prof-metrics { grid-template-columns: 1fr; }
+  .prof-hero-big { font-size: 42px; }
+  /* drop Brier + Skill-tag columns on the narrowest screens */
+  .prof-cat-row { grid-template-columns: minmax(0,1.5fr) .55fr .9fr 1fr; gap: 6px; padding: 10px 10px; }
+  .prof-cat-brier, .prof-cat-tag { display: none; }
+  .prof-chartwrap { height: 240px; }
+}

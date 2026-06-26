@@ -1,0 +1,35 @@
+/* ============================================================
+   HOME feed ("For You" carousels) + Watchlist. Dark tokens from styles.css.
+   ============================================================ */
+.mybets-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  width: calc(100% - 28px); margin: 12px 14px 0; padding: 12px 16px;
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); cursor: pointer; font-family: var(--font);
+  color: var(--text); font-size: 15px; font-weight: 700;
+}
+.mybets-bar:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+.mybets-l { display: flex; align-items: center; gap: 9px; }
+.mybets-ic { font-size: 17px; }
+.mybets-r { font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.browse-search { padding: 12px 14px 4px; }
+.browse-search input { max-width: 640px; }
+.browse-feed { padding-top: 6px; }
+
+.browse-page { padding: 16px 14px; }
+.browse-h { font-size: 20px; font-weight: 800; margin-bottom: 14px; }
+
+.browse-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+/* watchlist reuses .box, but in a grid it should fill its cell */
+.browse-grid .box { width: auto; }
+
+.browse-empty {
+  grid-column: 1 / -1; text-align: center; color: var(--muted);
+  padding: 48px 16px; line-height: 1.7;
+  background: var(--bg-elev); border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+}

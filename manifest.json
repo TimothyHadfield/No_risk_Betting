@@ -1,0 +1,14 @@
+{
+  "name": "No-Risk Betting",
+  "short_name": "No-Risk",
+  "description": "Real live prediction-market odds, fake money. Track if your forecasts are actually right.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0e13",
+  "theme_color": "#0b0e13",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
