@@ -249,6 +249,7 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); box-sh
 .auth-box h2 { font-size: 21px; margin: 4px 0 6px; }
 .auth-sub { color: var(--muted); font-size: 13.5px; margin: 0 0 16px; line-height: 1.5; }
 .auth-input { margin-bottom: 10px; }
+.auth-pf-label { display: block; text-align: left; font-size: 12.5px; color: var(--muted); margin: 2px 0 6px; }
 .auth-error { background: var(--no-soft); color: var(--no); border-radius: var(--radius-sm);
   font-size: 13px; padding: 8px 11px; margin-bottom: 10px; text-align: left; }
 .auth-links { display: flex; justify-content: space-between; gap: 10px;

@@ -149,9 +149,23 @@
       <div id="auth-panel-account" class="hidden">
         <p class="auth-signed">Signed in as <b id="auth-login-label"></b></p>
         <p class="auth-sub">Your bets and balance sync to this account on any device you log in from.</p>
+        <button id="auth-go-profile" class="btn btn-block">Profile &amp; privacy</button>
         <button id="auth-go-changepw" class="btn btn-block">Change password</button>
         <button id="auth-logout" class="btn btn-block">Log out</button>
         <button id="auth-go-delete" class="btn btn-block auth-danger">Delete account</button>
+      </div>
+
+      <!-- profile & privacy -->
+      <div id="auth-panel-profile" class="hidden">
+        <label class="auth-pf-label">Display name <em class="muted">(shown to others)</em></label>
+        <input id="auth-pf-display" class="auth-input" maxlength="30" placeholder="e.g. Sharp Caller">
+        <label class="auth-pf-label">Bio <em class="muted">(optional)</em></label>
+        <input id="auth-pf-bio" class="auth-input" maxlength="200" placeholder="A line about your forecasting">
+        <label class="auth-check"><input type="checkbox" id="auth-pf-public"> <span>Show me on the public leaderboard</span></label>
+        <label class="auth-check"><input type="checkbox" id="auth-pf-private"> <span>Make my bets private (hide them from the public feed)</span></label>
+        <div id="auth-pf-error" class="auth-error hidden"></div>
+        <button id="auth-pf-save" class="btn btn-primary btn-block">Save profile</button>
+        <p class="auth-links"><a href="#" id="auth-pf-back">Back</a></p>
       </div>
 
       <!-- change password -->

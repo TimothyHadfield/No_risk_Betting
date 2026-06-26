@@ -201,56 +201,27 @@
       else loadLeaderboard(body);
     },
 
-    async renderProfileCard(container) {
+    renderProfileCard(container) {
       const host = container.querySelector("#so-profile-card");
       if (!host) return;
+      // Logged out -> invite to join.
       if (!NRB.auth.isLoggedIn()) {
         host.innerHTML = `<div class="card so-profile-cta">
-          <p>Log in to claim a public handle and appear on the leaderboard.</p>
-          <button class="btn btn-primary" id="so-cta-login">Log in / Sign up</button></div>`;
+          <p>Log in or create an account to appear on the leaderboard and join the discussion.</p>
+          <button class="btn btn-primary" id="so-cta-login">Create account / Sign in</button></div>`;
         host.querySelector("#so-cta-login").addEventListener("click", () => NRB.authUI.open("login"));
         return;
       }
-      let p = {};
-      try { p = await NRB.api("/api/me/profile"); } catch (e) {}
-      const card = el(`<div class="card so-profile-edit"></div>`);
-      card.innerHTML = `
-        <div class="so-pe-head">
-          <h3>Your community profile</h3>
-          ${p.handle ? `<button class="btn btn-ghost so-view-me">View public page →</button>` : ""}
-        </div>
-        <label class="so-field"><span>Display name <em class="muted">(shown to others)</em></span>
-          <input id="so-handle" maxlength="30" placeholder="e.g. Sharp Caller" value="${fmt.esc(p.handle || "")}"></label>
-        <label class="so-field"><span>Bio <em class="muted">(optional)</em></span>
-          <input id="so-bio" maxlength="200" placeholder="A line about your forecasting" value="${fmt.esc(p.bio || "")}"></label>
-        <label class="so-check"><input type="checkbox" id="so-public" ${p.is_public ? "checked" : ""}>
-          <span>Show me on the public leaderboard</span></label>
-        <label class="so-check"><input type="checkbox" id="so-betspriv" ${p.bets_private ? "checked" : ""}>
-          <span>Make my bets private (hide them from the public feed)</span></label>
-        <div class="so-pe-err muted" id="so-pe-err"></div>
-        <button class="btn btn-primary btn-block" id="so-save">Save profile</button>`;
+      // Logged in WITHOUT a display name -> one-line prompt to set it (in settings).
+      if (!NRB.auth.display()) {
+        host.innerHTML = `<div class="card so-profile-cta">
+          <p>Set a display name to post and appear on the community.</p>
+          <button class="btn btn-primary" id="so-set-name">Set display name</button></div>`;
+        host.querySelector("#so-set-name").addEventListener("click", () => NRB.authUI.open("profile"));
+        return;
+      }
+      // Has a display name -> no editor box (manage it in Account → Profile & privacy).
       host.innerHTML = "";
-      host.appendChild(card);
-      const view = card.querySelector(".so-view-me");
-      if (view) view.addEventListener("click", () => NRB.go("user", { handle: p.handle }));
-      card.querySelector("#so-save").addEventListener("click", async () => {
-        const handle = card.querySelector("#so-handle").value.trim();
-        const bio = card.querySelector("#so-bio").value.trim();
-        const is_public = card.querySelector("#so-public").checked;
-        const bets_private = card.querySelector("#so-betspriv").checked;
-        const errEl = card.querySelector("#so-pe-err"); errEl.textContent = "";
-        const btn = card.querySelector("#so-save"); btn.disabled = true;
-        try {
-          const r = await NRB.api("/api/me/profile", { method: "POST", body: { handle, bio, is_public, bets_private } });
-          if (r && r.ok) {
-            NRB.toast("Profile saved.");
-            if (r.handle != null) NRB.auth.setDisplay(r.handle);  // update header button + drawer
-            if (NRB.authUI && NRB.authUI.refreshDrawer) NRB.authUI.refreshDrawer();
-            this.mount(document.getElementById("view"));  // refresh
-          } else { errEl.textContent = (r && r.error) || "Couldn't save."; }
-        } catch (e) { errEl.textContent = "Can't reach the server."; }
-        finally { btn.disabled = false; }
-      });
     },
   };
 

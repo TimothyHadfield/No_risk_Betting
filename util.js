@@ -509,24 +509,25 @@
     const e = $(id); if (!e) return;
     e.textContent = msg || ""; e.classList.toggle("hidden", !msg);
   }
-  const PANELS = ["form", "code", "account", "changepw", "delete"];
+  const PANELS = ["form", "code", "account", "profile", "changepw", "delete"];
 
   function refreshAuthModal() {
-    setErr("auth-error", ""); setErr("auth-cp-error", ""); setErr("auth-del-error", "");
+    setErr("auth-error", ""); setErr("auth-cp-error", ""); setErr("auth-del-error", ""); setErr("auth-pf-error", "");
     const loggedIn = NRB.auth.isLoggedIn();
     if (loggedIn && (authMode === "login" || authMode === "signup" || authMode === "recovery")) {
       authMode = "account";
     }
     // which panel is visible
     const panelFor = { login: "form", signup: "form", recovery: "form",
-      showcode: "code", account: "account", changepw: "changepw", delete: "delete" };
+      showcode: "code", account: "account", profile: "profile", changepw: "changepw", delete: "delete" };
     const active = panelFor[authMode] || "form";
     PANELS.forEach((p) => show("auth-panel-" + p, p === active));
 
     const titles = { login: "Log in", signup: "Create account", recovery: "Reset password",
       showcode: "Save your recovery code", account: "Account",
-      changepw: "Change password", delete: "Delete account" };
+      profile: "Profile & privacy", changepw: "Change password", delete: "Delete account" };
     $("auth-title").textContent = titles[authMode] || "Account";
+    if (active === "profile") loadAuthProfile();
 
     const subs = {
       login: "Log in to sync your bets across devices.",
@@ -562,7 +563,11 @@
     }
   }
   function authOpen(mode) {
-    authMode = NRB.auth.isLoggedIn() ? "account" : (mode || "login");
+    if (NRB.auth.isLoggedIn()) {
+      authMode = ["account", "profile", "changepw", "delete"].includes(mode) ? mode : "account";
+    } else {
+      authMode = mode || "login";
+    }
     const m = $("auth-modal"); if (!m) return;
     refreshAuthModal(); m.classList.remove("hidden");
     if (authMode === "login" || authMode === "signup" || authMode === "recovery") {
@@ -672,6 +677,37 @@
     finally { btn.disabled = false; }
   }
 
+  // ---- profile & privacy (in the account modal) ----
+  async function loadAuthProfile() {
+    try {
+      const p = await NRB.api("/api/me/profile");
+      if (!p) return;
+      if ($("auth-pf-display")) $("auth-pf-display").value = p.handle || "";
+      if ($("auth-pf-bio")) $("auth-pf-bio").value = p.bio || "";
+      if ($("auth-pf-public")) $("auth-pf-public").checked = !!p.is_public;
+      if ($("auth-pf-private")) $("auth-pf-private").checked = !!p.bets_private;
+    } catch (e) { /* leave fields */ }
+  }
+  async function profileSave() {
+    const handle = ($("auth-pf-display").value || "").trim();
+    const bio = ($("auth-pf-bio").value || "").trim();
+    const is_public = $("auth-pf-public").checked;
+    const bets_private = $("auth-pf-private").checked;
+    if (!handle) return setErr("auth-pf-error", "Enter a display name.");
+    const btn = $("auth-pf-save"); btn.disabled = true;
+    try {
+      const r = await NRB.api("/api/me/profile", { method: "POST", body: { handle, bio, is_public, bets_private } });
+      if (r && r.ok) {
+        if (r.handle != null) NRB.auth.setDisplay(r.handle);
+        updateDrawerAuth();
+        NRB.toast("Profile saved.");
+        goMode("account");
+        if (NRB.current && NRB.current.name === "community") NRB.go("community");
+      } else setErr("auth-pf-error", (r && r.error) || "Couldn't save.");
+    } catch (e) { setErr("auth-pf-error", "Can't reach the server."); }
+    finally { btn.disabled = false; }
+  }
+
   async function resetFlow() {
     if (!confirm("Reset virtual balance to $1,000 and delete all bets?")) return;
     await NRB.api("/api/account/reset", { method: "POST", body: { starting: 1000 } });
@@ -726,8 +762,12 @@
     });
     on("auth-code-done", "click", () => afterAuthChange("Account created — your bets are saved."));
     // account panel
+    on("auth-go-profile", "click", () => goMode("profile"));
     on("auth-go-changepw", "click", () => goMode("changepw"));
     on("auth-go-delete", "click", () => goMode("delete"));
+    // profile & privacy panel
+    on("auth-pf-save", "click", profileSave);
+    on("auth-pf-back", "click", (e) => { e.preventDefault(); goMode("account"); });
     on("auth-logout", "click", async () => {
       await NRB.auth.logout(); updateDrawerAuth(); authClose();
       NRB.toast("Logged out."); NRB.go("browse");
