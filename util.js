@@ -436,9 +436,18 @@
     const container = document.getElementById("view");
     container.innerHTML = ""; window.scrollTo(0, 0);
     mounted = view; NRB.current = { name, params: params || {} };
+    updateTopnav();
     Promise.resolve(view.mount(container, params || {}))
       .catch((e) => console.error("view mount error", name, e));
   };
+  // highlight the active primary nav tab
+  function updateTopnav() {
+    const map = { browse: "browse", watchlist: "browse",
+                  community: "community", user: "community" };
+    const active = map[NRB.current.name] || "";
+    document.querySelectorAll(".topnav-tab").forEach((t) =>
+      t.classList.toggle("active", t.dataset.go === active));
+  }
   NRB.openMarket = function (ticker, side) { NRB.go("detail", { ticker, side: side || "yes" }); };
 
   // ---- burger drawer -------------------------------------------------------
@@ -725,6 +734,8 @@
       it.addEventListener("click", () => drawerAction(it.dataset.action)));
     const brand = document.getElementById("brand");
     if (brand) brand.addEventListener("click", () => NRB.go("browse"));
+    document.querySelectorAll(".topnav-tab").forEach((t) =>
+      t.addEventListener("click", () => NRB.go(t.dataset.go)));
 
     // auth modal wiring
     updateDrawerAuth();

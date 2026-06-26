@@ -111,7 +111,17 @@ a { color: inherit; text-decoration: none; }
 /* consistent inline icon sizing */
 .ico-svg { width: 20px; height: 20px; flex-shrink: 0; stroke: currentColor; fill: none;
   stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-.account { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.topnav { display: flex; align-items: center; gap: 2px; margin-left: 6px; }
+.topnav-tab { background: none; border: none; color: var(--muted); font: 600 14px var(--font);
+  padding: 8px 13px; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap; }
+.topnav-tab:hover { color: var(--text); background: var(--bg-elev2); }
+.topnav-tab.active { color: var(--accent); background: var(--accent-soft); }
+.account { margin-left: auto; display: flex; align-items: center; gap: 14px; min-width: 0; }
+@media (max-width: 600px) {
+  .topnav { margin-left: 2px; }
+  .topnav-tab { padding: 7px 9px; font-size: 13px; }
+  .account { gap: 9px; }
+}
 .acct-stat { text-align: right; line-height: 1.1; }
 .acct-stat label { display: block; font-size: 9.5px; text-transform: uppercase;
   letter-spacing: .06em; color: var(--muted); font-weight: 700; }

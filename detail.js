@@ -1387,11 +1387,12 @@
       runQuote();
       startPolling();
 
-      // community discussion for this market (one thread per event)
+      // community discussion for this market — in the LEFT column under the chart
       if (NRB.social && NRB.social.mountThread) {
         try {
           const title = (S.event_title) || (S.market && S.market.title) || S.ticker;
-          NRB.social.mountThread(container, "mkt:" + eventTicker(),
+          const leftCol = container.querySelector(".detail-main") || container;
+          NRB.social.mountThread(leftCol, "mkt:" + eventTicker(),
             { ticker: S.ticker, title: title });
         } catch (e) {}
       }

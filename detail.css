@@ -21,6 +21,7 @@
   align-items: start;
 }
 .detail-main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.detail-main .so-thread { margin-top: 0; }   /* flex gap already spaces it */
 .detail-side { position: sticky; top: calc(var(--topbar-h) + 16px); }
 
 @media (max-width: 880px) {
