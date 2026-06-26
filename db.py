@@ -40,7 +40,23 @@ DB_PATH = "data.db"
 DEFAULT_STARTING_BALANCE = 1000.0
 
 # Postgres when DATABASE_URL is present, else SQLite. Decided once at import.
-DATABASE_URL = os.environ.get("DATABASE_URL") or ""
+def _clean_db_url(raw):
+    """Tolerate common copy-paste mistakes around a Postgres connection string.
+    Hosts' "connect" snippets often wrap the URL, e.g. `psql 'postgresql://...'`
+    or `export DATABASE_URL="postgresql://..."`. Strip those so the bare DSN is
+    used regardless of which snippet was pasted into the host's env var."""
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    for prefix in ("export ", "psql ", "DATABASE_URL=", "database_url="):
+        if s.lower().startswith(prefix.lower()):
+            s = s[len(prefix):].strip()
+    if len(s) >= 2 and s[0] in "'\"" and s[-1] == s[0]:  # surrounding quotes
+        s = s[1:-1].strip()
+    return s
+
+
+DATABASE_URL = _clean_db_url(os.environ.get("DATABASE_URL"))
 USE_PG = bool(DATABASE_URL)
 if USE_PG:
     import psycopg2
