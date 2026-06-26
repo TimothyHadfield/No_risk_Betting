@@ -202,7 +202,8 @@ def init(db_path=DB_PATH):
             closed_at       {num},
             close_time      TEXT,
             category        TEXT,
-            user_prob       {num}
+            user_prob       {num},
+            is_public       INTEGER DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS equity_history (
@@ -257,10 +258,49 @@ def init(db_path=DB_PATH):
             created_at  {num} NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS profiles (
+            user_id     TEXT PRIMARY KEY,
+            handle      TEXT UNIQUE,
+            handle_lc   TEXT UNIQUE,
+            bio         TEXT,
+            is_public   INTEGER DEFAULT 0,
+            created_at  {num} NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS comments (
+            id          {pk},
+            user_id     TEXT NOT NULL,
+            thread      TEXT NOT NULL,
+            body        TEXT NOT NULL,
+            status      TEXT NOT NULL DEFAULT 'visible',
+            created_at  {num} NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS reactions (
+            id           {pk},
+            user_id      TEXT NOT NULL,
+            target_type  TEXT NOT NULL,
+            target_id    TEXT NOT NULL,
+            kind         TEXT NOT NULL DEFAULT 'like',
+            created_at   {num} NOT NULL,
+            UNIQUE (user_id, target_type, target_id, kind)
+        );
+
+        CREATE TABLE IF NOT EXISTS reports (
+            id           {pk},
+            reporter_id  TEXT NOT NULL,
+            target_type  TEXT NOT NULL,
+            target_id    TEXT NOT NULL,
+            reason       TEXT,
+            created_at   {num} NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_bets_user ON bets(user_id, status);
         CREATE INDEX IF NOT EXISTS idx_parlays_user ON parlays(user_id, status);
         CREATE INDEX IF NOT EXISTS idx_equity_user ON equity_history(user_id);
         CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_comments_thread ON comments(thread, status);
+        CREATE INDEX IF NOT EXISTS idx_reactions_target ON reactions(target_type, target_id);
     """
     with _lock:
         if USE_PG:
@@ -302,6 +342,9 @@ def _migrate():
     if "reset_expires" not in cols:
         num = "DOUBLE PRECISION" if USE_PG else "REAL"
         _exec(f"ALTER TABLE users ADD COLUMN reset_expires {num}")
+        _commit()
+    if "is_public" not in _table_columns("bets"):
+        _exec("ALTER TABLE bets ADD COLUMN is_public INTEGER DEFAULT 0")
         _commit()
 
 
@@ -719,4 +762,206 @@ def resolve_parlay(pid, status, payout, realized_pnl):
         _exec("UPDATE parlays SET status = ?, payout = ?, realized_pnl = ?, "
               "closed_at = ? WHERE id = ?",
               (status, payout, realized_pnl, time.time(), pid))
+        _commit()
+
+
+# ==========================================================================
+# Social layer: public profiles, leaderboard, public bets feed, comments,
+# reactions, reports. Privacy rule: only `handle` (and chosen bio) is ever
+# exposed publicly -- never email/login or the raw user_id.
+# ==========================================================================
+
+# ---- profiles ------------------------------------------------------------
+
+def _ensure_profile(uid):
+    if USE_PG:
+        _exec("INSERT INTO profiles (user_id, is_public, created_at) "
+              "VALUES (?, 0, ?) ON CONFLICT (user_id) DO NOTHING",
+              (uid, time.time()))
+    else:
+        _exec("INSERT OR IGNORE INTO profiles (user_id, is_public, created_at) "
+              "VALUES (?, 0, ?)", (uid, time.time()))
+
+
+@_with_retry
+def get_profile(uid):
+    with _lock:
+        _ensure_profile(uid)
+        _commit()
+        return _query_one("SELECT * FROM profiles WHERE user_id = ?", (uid,))
+
+
+@_with_retry
+def get_profile_by_handle(handle):
+    with _lock:
+        return _query_one("SELECT * FROM profiles WHERE handle_lc = ?",
+                          ((handle or "").strip().lower(),))
+
+
+@_with_retry
+def handle_available(handle, exclude_uid=None):
+    lc = (handle or "").strip().lower()
+    with _lock:
+        row = _query_one("SELECT user_id FROM profiles WHERE handle_lc = ?", (lc,))
+    return (row is None) or (row["user_id"] == exclude_uid)
+
+
+@_with_retry
+def set_profile(uid, handle=None, bio=None, is_public=None):
+    """Create/update a profile. Returns (ok, error). Handle is unique
+    (case-insensitive)."""
+    with _lock:
+        _ensure_profile(uid)
+        if handle is not None:
+            lc = handle.strip().lower()
+            row = _query_one("SELECT user_id FROM profiles WHERE handle_lc = ?", (lc,))
+            if row and row["user_id"] != uid:
+                _commit()
+                return False, "That handle is taken."
+            _exec("UPDATE profiles SET handle = ?, handle_lc = ? WHERE user_id = ?",
+                  (handle.strip(), lc, uid))
+        if bio is not None:
+            _exec("UPDATE profiles SET bio = ? WHERE user_id = ?", (bio, uid))
+        if is_public is not None:
+            _exec("UPDATE profiles SET is_public = ? WHERE user_id = ?",
+                  (1 if is_public else 0, uid))
+        _commit()
+        return True, None
+
+
+@_with_retry
+def public_profiles():
+    """Public profiles that have chosen a handle -- candidates for the leaderboard."""
+    with _lock:
+        return _query("SELECT user_id, handle, bio FROM profiles "
+                      "WHERE is_public = 1 AND handle IS NOT NULL")
+
+
+# ---- public bets feed ----------------------------------------------------
+
+@_with_retry
+def set_bet_public(bet_id, uid, public):
+    with _lock:
+        _exec("UPDATE bets SET is_public = ? WHERE id = ? AND user_id = ?",
+              (1 if public else 0, bet_id, uid))
+        _commit()
+
+
+_FEED_COLS = ("b.id, b.ticker, b.event_ticker, b.title, b.side, b.contracts, "
+              "b.avg_price, b.stake, b.cost_basis, b.status, b.result, "
+              "b.realized_pnl, b.placed_at, b.category, b.user_prob, p.handle")
+
+
+@_with_retry
+def public_feed(limit=50):
+    with _lock:
+        return _query(
+            f"SELECT {_FEED_COLS} FROM bets b JOIN profiles p ON b.user_id = p.user_id "
+            "WHERE b.is_public = 1 AND p.is_public = 1 AND p.handle IS NOT NULL "
+            "ORDER BY b.placed_at DESC LIMIT ?", (limit,))
+
+
+@_with_retry
+def public_bets_for_user(uid, limit=50):
+    with _lock:
+        return _query(
+            f"SELECT {_FEED_COLS} FROM bets b JOIN profiles p ON b.user_id = p.user_id "
+            "WHERE b.user_id = ? AND b.is_public = 1 "
+            "ORDER BY b.placed_at DESC LIMIT ?", (uid, limit))
+
+
+# ---- comments ------------------------------------------------------------
+
+@_with_retry
+def add_comment(uid, thread, body):
+    with _lock:
+        return _insert(
+            "INSERT INTO comments (user_id, thread, body, status, created_at) "
+            "VALUES (?,?,?, 'visible', ?)", (uid, thread, body, time.time()))
+
+
+@_with_retry
+def list_comments(thread, limit=200):
+    with _lock:
+        return _query(
+            "SELECT c.id, c.user_id, c.body, c.created_at, p.handle "
+            "FROM comments c LEFT JOIN profiles p ON c.user_id = p.user_id "
+            "WHERE c.thread = ? AND c.status = 'visible' "
+            "ORDER BY c.created_at ASC LIMIT ?", (thread, limit))
+
+
+@_with_retry
+def get_comment(cid):
+    with _lock:
+        return _query_one("SELECT * FROM comments WHERE id = ?", (cid,))
+
+
+@_with_retry
+def count_comments(thread):
+    with _lock:
+        row = _query_one("SELECT COUNT(*) AS n FROM comments "
+                         "WHERE thread = ? AND status = 'visible'", (thread,))
+        return row["n"] if row else 0
+
+
+@_with_retry
+def set_comment_status(cid, status):
+    with _lock:
+        _exec("UPDATE comments SET status = ? WHERE id = ?", (status, cid))
+        _commit()
+
+
+# ---- reactions -----------------------------------------------------------
+
+@_with_retry
+def toggle_reaction(uid, target_type, target_id, kind="like"):
+    """Toggle a reaction. Returns True if now on, False if removed."""
+    target_id = str(target_id)
+    with _lock:
+        row = _query_one(
+            "SELECT id FROM reactions WHERE user_id = ? AND target_type = ? "
+            "AND target_id = ? AND kind = ?", (uid, target_type, target_id, kind))
+        if row:
+            _exec("DELETE FROM reactions WHERE id = ?", (row["id"],))
+            _commit()
+            return False
+        _exec("INSERT INTO reactions (user_id, target_type, target_id, kind, created_at) "
+              "VALUES (?,?,?,?,?)", (uid, target_type, target_id, kind, time.time()))
+        _commit()
+        return True
+
+
+@_with_retry
+def reaction_counts(target_type, target_ids, kind="like"):
+    """Map of target_id -> count for a batch of targets."""
+    ids = [str(t) for t in target_ids]
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    with _lock:
+        rows = _query(
+            f"SELECT target_id, COUNT(*) AS n FROM reactions "
+            f"WHERE target_type = ? AND kind = ? AND target_id IN ({placeholders}) "
+            "GROUP BY target_id", (target_type, kind, *ids))
+    return {r["target_id"]: r["n"] for r in rows}
+
+
+@_with_retry
+def reactions_by_user(uid, target_type, kind="like"):
+    """Set of target_ids the user has reacted to (for highlighting)."""
+    with _lock:
+        rows = _query("SELECT target_id FROM reactions WHERE user_id = ? "
+                      "AND target_type = ? AND kind = ?", (uid, target_type, kind))
+    return {r["target_id"] for r in rows}
+
+
+# ---- reports (moderation) ------------------------------------------------
+
+@_with_retry
+def add_report(reporter_id, target_type, target_id, reason):
+    with _lock:
+        _exec("INSERT INTO reports (reporter_id, target_type, target_id, reason, "
+              "created_at) VALUES (?,?,?,?,?)",
+              (reporter_id, target_type, str(target_id), (reason or "")[:500],
+               time.time()))
         _commit()

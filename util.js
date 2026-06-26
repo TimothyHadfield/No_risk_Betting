@@ -421,6 +421,7 @@
     if (action === "account") return authOpen("login");
     if (action === "home") return NRB.go("browse");
     if (action === "watchlist") return NRB.go("watchlist");
+    if (action === "community") return NRB.go("community");
     if (action === "activity") return NRB.go("portfolio");
     if (action === "profile") return NRB.go("profile");
     if (action === "analytics") return NRB.go("analytics");

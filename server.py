@@ -31,6 +31,9 @@ import mailer
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8765"))
 DB_FILE = os.environ.get("NRB_DB", "data.db")
+# Comma-separated handles that can moderate (delete any comment). Set in the host.
+ADMIN_HANDLES = {h.strip().lower() for h in
+                 os.environ.get("ADMIN_HANDLES", "").split(",") if h.strip()}
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = {"/": "index.html", "/index.html": "index.html",
           "/app.js": "app.js", "/styles.css": "styles.css"}
@@ -50,6 +53,15 @@ _MKT_TTL = 15.0
 # free tier, so a dict is fine; it just resets on restart).
 _rl_lock = threading.Lock()
 _rl_hits = {}  # key -> [timestamps within window]
+
+# Short cache for the (relatively expensive) leaderboard computation.
+_lb_lock = threading.Lock()
+_lb_cache = {"data": None, "at": 0.0}
+_LB_TTL = 30.0
+
+# Minimal slur blocklist for comments -- a backstop, not a real filter. Real
+# moderation is the report + delete tooling. Kept short to limit false positives.
+_BLOCKED_WORDS = {"nigger", "faggot", "kike", "chink", "retard", "rape"}
 
 
 def _rate_ok(key, limit, window):
@@ -298,6 +310,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_analytics()
         if path == "/api/auth/me":
             return self.api_me()
+        if path == "/api/leaderboard":
+            return self.api_leaderboard(q)
+        if path == "/api/feed":
+            return self.api_feed()
+        if path == "/api/comments":
+            return self.api_list_comments(q)
+        if path == "/api/me/profile":
+            return self.api_my_profile()
+        if path.startswith("/api/u/"):
+            return self.api_public_profile(urllib.parse.unquote(path[len("/api/u/"):]))
         return self._send_json({"error": "not found"}, 404)
 
     def _post_route(self):
@@ -329,6 +351,18 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_close_bet(self._bet_id(path, "/close"))
         if path.startswith("/api/bets/") and path.endswith("/force_settle"):
             return self.api_force_settle(self._bet_id(path, "/force_settle"), body)
+        if path == "/api/me/profile":
+            return self.api_set_profile(body)
+        if path == "/api/comments":
+            return self.api_add_comment(body)
+        if path.startswith("/api/comments/") and path.endswith("/delete"):
+            return self.api_delete_comment(self._seg_id(path, "/api/comments/", "/delete"))
+        if path.startswith("/api/comments/") and path.endswith("/report"):
+            return self.api_report(self._seg_id(path, "/api/comments/", "/report"), body)
+        if path == "/api/reactions":
+            return self.api_react(body)
+        if path.startswith("/api/bets/") and path.endswith("/public"):
+            return self.api_share_bet(self._bet_id(path, "/public"), body)
         if path == "/api/parlays":
             return self.api_create_parlay(body)
         if path.startswith("/api/parlays/") and path.endswith("/force_settle"):
@@ -343,6 +377,13 @@ class Handler(BaseHTTPRequestHandler):
     def _bet_id(path, suffix):
         try:
             return int(path[len("/api/bets/"):-len(suffix)])
+        except ValueError:
+            return -1
+
+    @staticmethod
+    def _seg_id(path, prefix, suffix):
+        try:
+            return int(path[len(prefix):-len(suffix)])
         except ValueError:
             return -1
 
@@ -851,7 +892,223 @@ class Handler(BaseHTTPRequestHandler):
         u = db.get_user(uid) if uid else None
         if not u:
             return self._send_json({"logged_in": False})
-        self._send_json({"logged_in": True, "login": u["login"], "user_id": uid})
+        p = db.get_profile(uid)
+        self._send_json({"logged_in": True, "login": u["login"], "user_id": uid,
+                         "handle": (p or {}).get("handle"),
+                         "is_public": bool((p or {}).get("is_public"))})
+
+    # ---- API: social (profiles, leaderboard, feed, comments, reactions) ----
+    _HANDLE_RE = re.compile(r"^[a-zA-Z0-9_]{3,20}$")
+
+    def _require_login(self):
+        """Return uid if logged in, else send 401 and return None."""
+        uid = self._token_uid()
+        if not uid:
+            self._send_json({"error": "Log in to do that."}, 401)
+            return None
+        return uid
+
+    def _is_admin(self, uid):
+        p = db.get_profile(uid)
+        h = (p or {}).get("handle")
+        return bool(h and h.lower() in ADMIN_HANDLES)
+
+    @staticmethod
+    def _record(bets):
+        resolved = [b for b in bets if b.get("status") == "settled" and b.get("result")]
+        wins = sum(1 for b in resolved if b["result"] == b["side"])
+        return wins, len(resolved) - wins
+
+    def api_my_profile(self):
+        uid = self._require_login()
+        if not uid:
+            return
+        p = db.get_profile(uid) or {}
+        self._send_json({"handle": p.get("handle"), "bio": p.get("bio"),
+                         "is_public": bool(p.get("is_public"))})
+
+    def api_set_profile(self, body):
+        uid = self._require_login()
+        if not uid:
+            return
+        handle = body.get("handle")
+        if handle is not None:
+            handle = handle.strip()
+            if not self._HANDLE_RE.match(handle):
+                return self._send_json(
+                    {"error": "Handle must be 3-20 characters: letters, numbers, "
+                              "underscore."}, 400)
+        bio = body.get("bio")
+        if bio is not None:
+            bio = bio.strip()[:200]
+        is_public = body.get("is_public")
+        ok, err = db.set_profile(uid, handle=handle, bio=bio, is_public=is_public)
+        if not ok:
+            return self._send_json({"error": err}, 409)
+        p = db.get_profile(uid)
+        self._send_json({"ok": True, "handle": p.get("handle"), "bio": p.get("bio"),
+                         "is_public": bool(p.get("is_public"))})
+
+    def _bet_card(self, b, uid=None, like_counts=None, liked=None):
+        """Public-safe view of a bet for feeds/profiles (no user_id/email)."""
+        price = b.get("avg_price")
+        bid = str(b["id"])
+        return {
+            "id": b["id"], "handle": b.get("handle"), "ticker": b["ticker"],
+            "event_ticker": b.get("event_ticker"), "title": b["title"],
+            "side": b["side"], "stake": round(b.get("stake") or 0, 2),
+            "avg_price": price, "mult": (1.0 / price) if price else None,
+            "status": b["status"], "result": b.get("result"),
+            "realized_pnl": b.get("realized_pnl"), "placed_at": b["placed_at"],
+            "category": b.get("category"),
+            "likes": (like_counts or {}).get(bid, 0),
+            "liked": bool(liked and bid in liked),
+        }
+
+    def api_leaderboard(self, q):
+        now = time.time()
+        with _lb_lock:
+            if _lb_cache["data"] is not None and now - _lb_cache["at"] < _LB_TTL:
+                return self._send_json({"leaders": _lb_cache["data"]})
+        leaders = []
+        for p in db.public_profiles():
+            bets = db.list_bets(p["user_id"])
+            s = analytics.summary(bets)
+            if s["n_settled"] < 1:
+                continue
+            wins, losses = self._record(bets)
+            leaders.append({
+                "handle": p["handle"], "bio": p.get("bio"),
+                "roi": s["roi"], "brier": s["brier"], "win_rate": s["win_rate"],
+                "net": s["realized_pnl"], "n_settled": s["n_settled"],
+                "n_scored": s["n_scored"], "wins": wins, "losses": losses,
+            })
+        # default rank: ROI desc (None last)
+        leaders.sort(key=lambda x: (x["roi"] is not None, x["roi"] or 0), reverse=True)
+        for i, l in enumerate(leaders):
+            l["rank"] = i + 1
+        with _lb_lock:
+            _lb_cache["data"] = leaders
+            _lb_cache["at"] = now
+        self._send_json({"leaders": leaders})
+
+    def api_feed(self):
+        uid = self._token_uid()
+        rows = db.public_feed(60)
+        ids = [r["id"] for r in rows]
+        counts = db.reaction_counts("bet", ids)
+        liked = db.reactions_by_user(uid, "bet") if uid else set()
+        self._send_json({"bets": [self._bet_card(r, uid, counts, liked) for r in rows]})
+
+    def api_public_profile(self, handle):
+        p = db.get_profile_by_handle(handle)
+        if not p or not p.get("is_public"):
+            return self._send_json({"error": "profile not found"}, 404)
+        uid = p["user_id"]
+        bets = db.list_bets(uid)
+        s = analytics.summary(bets)
+        wins, losses = self._record(bets)
+        pubrows = db.public_bets_for_user(uid, 30)
+        viewer = self._token_uid()
+        counts = db.reaction_counts("bet", [r["id"] for r in pubrows])
+        liked = db.reactions_by_user(viewer, "bet") if viewer else set()
+        self._send_json({
+            "handle": p["handle"], "bio": p.get("bio"),
+            "stats": {"roi": s["roi"], "brier": s["brier"], "win_rate": s["win_rate"],
+                      "net": s["realized_pnl"], "n_settled": s["n_settled"],
+                      "n_scored": s["n_scored"], "wins": wins, "losses": losses,
+                      "recent_results": s["recent_results"]},
+            "bets": [self._bet_card(r, viewer, counts, liked) for r in pubrows],
+        })
+
+    def api_share_bet(self, bet_id, body):
+        uid = self._require_login()
+        if not uid:
+            return
+        b = db.get_bet(bet_id)
+        if not b or b["user_id"] != uid:
+            return self._send_json({"error": "no such bet"}, 404)
+        db.set_bet_public(bet_id, uid, bool(body.get("public", True)))
+        self._send_json({"ok": True, "is_public": bool(body.get("public", True))})
+
+    # ---- comments ----
+    def api_list_comments(self, q):
+        thread = (q.get("thread", [""])[0] or "").strip()
+        if not thread:
+            return self._send_json({"comments": []})
+        uid = self._token_uid()
+        rows = db.list_comments(thread)
+        ids = [r["id"] for r in rows]
+        counts = db.reaction_counts("comment", ids)
+        liked = db.reactions_by_user(uid, "comment") if uid else set()
+        admin = bool(uid and self._is_admin(uid))
+        out = []
+        for r in rows:
+            cid = str(r["id"])
+            out.append({
+                "id": r["id"], "handle": r.get("handle") or "anonymous",
+                "body": r["body"], "created_at": r["created_at"],
+                "likes": counts.get(cid, 0), "liked": cid in liked,
+                "mine": bool(uid and r["user_id"] == uid),
+                "can_delete": bool(uid and (r["user_id"] == uid or admin)),
+            })
+        self._send_json({"comments": out, "count": len(out)})
+
+    def api_add_comment(self, body):
+        uid = self._require_login()
+        if not uid:
+            return
+        if self._throttled("comment", 12, 120):
+            return
+        p = db.get_profile(uid)
+        if not p or not p.get("handle"):
+            return self._send_json(
+                {"error": "Pick a public handle first (Account → Profile)."}, 403)
+        thread = (body.get("thread") or "").strip()[:120]
+        text = (body.get("body") or "").strip()
+        if not thread or not text:
+            return self._send_json({"error": "Empty comment."}, 400)
+        if len(text) > 1000:
+            return self._send_json({"error": "Comment too long (1000 max)."}, 400)
+        low = text.lower()
+        if any(w in low for w in _BLOCKED_WORDS):
+            return self._send_json({"error": "That comment violates the code of conduct."}, 400)
+        cid = db.add_comment(uid, thread, text)
+        self._send_json({"ok": True, "id": cid})
+
+    def api_delete_comment(self, cid):
+        uid = self._require_login()
+        if not uid:
+            return
+        c = db.get_comment(cid)
+        if not c:
+            return self._send_json({"error": "not found"}, 404)
+        if c["user_id"] != uid and not self._is_admin(uid):
+            return self._send_json({"error": "Not allowed."}, 403)
+        db.set_comment_status(cid, "deleted")
+        self._send_json({"ok": True})
+
+    def api_report(self, cid, body):
+        uid = self._require_login()
+        if not uid:
+            return
+        if self._throttled("report", 20, 600):
+            return
+        db.add_report(uid, "comment", cid, body.get("reason"))
+        self._send_json({"ok": True})
+
+    def api_react(self, body):
+        uid = self._require_login()
+        if not uid:
+            return
+        if self._throttled("react", 60, 60):
+            return
+        ttype = (body.get("target_type") or "").strip()
+        tid = body.get("target_id")
+        if ttype not in ("bet", "comment") or tid in (None, ""):
+            return self._send_json({"error": "bad target"}, 400)
+        on = db.toggle_reaction(uid, ttype, str(tid))
+        self._send_json({"ok": True, "liked": on})
 
     def api_reset(self, body):
         uid = self._uid()

@@ -1370,6 +1370,11 @@
       if (S.destroyed) return;
       runQuote();
       startPolling();
+
+      // community discussion for this market (one thread per event)
+      if (NRB.social && NRB.social.mountThread) {
+        try { NRB.social.mountThread(container, "mkt:" + eventTicker()); } catch (e) {}
+      }
     },
 
     unmount() {

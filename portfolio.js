@@ -34,6 +34,12 @@
     </div>`;
   }
 
+  // helper: share-to-feed toggle button
+  function shareBtn(b) {
+    const on = !!b.is_public;
+    return `<button class="btn btn-ghost pf-share ${on ? "on" : ""}" data-id="${fmt.esc(b.id)}" data-pub="${on ? 1 : 0}" title="Show this bet on the public feed">${on ? "✓ Shared" : "Share"}</button>`;
+  }
+
   // helper: a clickable title cell with icon + flags
   function titleCell(b) {
     const label = b.title || b.ticker;
@@ -309,6 +315,7 @@
             <td class="pf-actions">
               <button class="btn pf-sell" data-id="${fmt.esc(b.id)}">Sell</button>
               <button class="btn btn-ghost pf-settle" data-id="${fmt.esc(b.id)}" title="Demo: force-settle now">Settle&#9656;</button>
+              ${shareBtn(b)}
             </td>
           </tr>`;
       }).join("");
@@ -333,6 +340,30 @@
         btn.addEventListener("click", () => this.sell(btn.dataset.id, btn)));
       wrap.querySelectorAll(".pf-settle").forEach((btn) =>
         btn.addEventListener("click", () => this.settle(btn.dataset.id, btn)));
+      wrap.querySelectorAll(".pf-share").forEach((btn) =>
+        btn.addEventListener("click", () => this.share(btn)));
+    },
+
+    async share(btn) {
+      if (!NRB.auth || !NRB.auth.isLoggedIn()) {
+        NRB.toast("Log in to share bets to the community.");
+        if (NRB.authUI) NRB.authUI.open("login");
+        return;
+      }
+      const id = btn.dataset.id;
+      const makePublic = btn.dataset.pub !== "1";
+      btn.disabled = true;
+      try {
+        const r = await NRB.api("/api/bets/" + encodeURIComponent(id) + "/public",
+          { method: "POST", body: { public: makePublic } });
+        if (r && r.ok) {
+          btn.dataset.pub = makePublic ? "1" : "0";
+          btn.classList.toggle("on", makePublic);
+          btn.textContent = makePublic ? "✓ Shared" : "Share";
+          NRB.toast(makePublic ? "Shared to the community feed." : "Removed from the feed.");
+        } else { NRB.toast((r && r.error) || "Couldn't update sharing."); }
+      } catch (e) { NRB.toast("Couldn't update sharing."); }
+      finally { btn.disabled = false; }
     },
 
     renderHistory(history) {
@@ -365,6 +396,7 @@
             <td><span class="pf-outcome ${oc}">${outcome}</span></td>
             <td class="tnum">${fmt.usd(b.payout)}</td>
             <td class="tnum">${signedCell(pnl)}</td>
+            <td class="pf-actions">${shareBtn(b)}</td>
           </tr>`;
       }).join("");
 
@@ -375,7 +407,7 @@
               <tr>
                 <th>Market</th><th>Side</th><th class="tnum">Qty</th>
                 <th class="tnum">Entry</th><th>Outcome</th>
-                <th class="tnum">Payout</th><th class="tnum">Realized P&amp;L</th>
+                <th class="tnum">Payout</th><th class="tnum">Realized P&amp;L</th><th></th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -384,6 +416,8 @@
 
       wrap.querySelectorAll(".pf-link").forEach((a) =>
         a.addEventListener("click", () => NRB.openMarket(a.dataset.ticker)));
+      wrap.querySelectorAll(".pf-share").forEach((btn) =>
+        btn.addEventListener("click", () => this.share(btn)));
     },
 
     async sell(id, btn) {
