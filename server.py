@@ -314,6 +314,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_leaderboard(q)
         if path == "/api/feed":
             return self.api_feed()
+        if path == "/api/comments/all":
+            return self.api_all_comments()
         if path == "/api/comments":
             return self.api_list_comments(q)
         if path == "/api/me/profile":
@@ -943,7 +945,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         p = db.get_profile(uid) or {}
         self._send_json({"handle": p.get("handle"), "bio": p.get("bio"),
-                         "is_public": bool(p.get("is_public"))})
+                         "is_public": bool(p.get("is_public")),
+                         "bets_private": bool(p.get("bets_private"))})
 
     def api_set_profile(self, body):
         uid = self._require_login()
@@ -958,13 +961,15 @@ class Handler(BaseHTTPRequestHandler):
         bio = body.get("bio")
         if bio is not None:
             bio = bio.strip()[:200]
-        is_public = body.get("is_public")
-        ok, err = db.set_profile(uid, handle=handle, bio=bio, is_public=is_public)
+        ok, err = db.set_profile(uid, handle=handle, bio=bio,
+                                 is_public=body.get("is_public"),
+                                 bets_private=body.get("bets_private"))
         if not ok:
             return self._send_json({"error": err}, 409)
         p = db.get_profile(uid)
         self._send_json({"ok": True, "handle": p.get("handle"), "bio": p.get("bio"),
-                         "is_public": bool(p.get("is_public"))})
+                         "is_public": bool(p.get("is_public")),
+                         "bets_private": bool(p.get("bets_private"))})
 
     def _bet_card(self, b, uid=None, like_counts=None, liked=None):
         """Public-safe view of a bet for feeds/profiles (no user_id/email)."""
@@ -1080,7 +1085,7 @@ class Handler(BaseHTTPRequestHandler):
         p = db.get_profile(uid)
         if not p or not p.get("handle"):
             return self._send_json(
-                {"error": "Pick a public handle first (Account → Profile)."}, 403)
+                {"error": "Pick a display name first to comment."}, 403)
         thread = (body.get("thread") or "").strip()[:120]
         text = (body.get("body") or "").strip()
         if not thread or not text:
@@ -1090,8 +1095,31 @@ class Handler(BaseHTTPRequestHandler):
         low = text.lower()
         if any(w in low for w in _BLOCKED_WORDS):
             return self._send_json({"error": "That comment violates the code of conduct."}, 400)
-        cid = db.add_comment(uid, thread, text)
+        # market context (for the global activity feed to label + link)
+        ref_ticker = (body.get("ticker") or "").strip()[:64] or None
+        ref_title = (body.get("title") or "").strip()[:160] or None
+        cid = db.add_comment(uid, thread, text, ref_ticker, ref_title)
         self._send_json({"ok": True, "id": cid})
+
+    def api_all_comments(self):
+        """Every recent comment across the site — the global activity view."""
+        uid = self._token_uid()
+        rows = db.all_comments(80)
+        counts = db.reaction_counts("comment", [r["id"] for r in rows])
+        liked = db.reactions_by_user(uid, "comment") if uid else set()
+        admin = bool(uid and self._is_admin(uid))
+        out = []
+        for r in rows:
+            cid = str(r["id"])
+            out.append({
+                "id": r["id"], "handle": r.get("handle") or "anonymous",
+                "body": r["body"], "created_at": r["created_at"],
+                "ref_ticker": r.get("ref_ticker"), "ref_title": r.get("ref_title"),
+                "likes": counts.get(cid, 0), "liked": cid in liked,
+                "mine": bool(uid and r["user_id"] == uid),
+                "can_delete": bool(uid and (r["user_id"] == uid or admin)),
+            })
+        self._send_json({"comments": out})
 
     def api_delete_comment(self, cid):
         uid = self._require_login()

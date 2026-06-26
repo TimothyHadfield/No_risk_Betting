@@ -203,7 +203,8 @@ def init(db_path=DB_PATH):
             close_time      TEXT,
             category        TEXT,
             user_prob       {num},
-            is_public       INTEGER DEFAULT 0
+            is_public       INTEGER DEFAULT 0,
+            hidden          INTEGER DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS equity_history (
@@ -259,12 +260,13 @@ def init(db_path=DB_PATH):
         );
 
         CREATE TABLE IF NOT EXISTS profiles (
-            user_id     TEXT PRIMARY KEY,
-            handle      TEXT UNIQUE,
-            handle_lc   TEXT UNIQUE,
-            bio         TEXT,
-            is_public   INTEGER DEFAULT 0,
-            created_at  {num} NOT NULL
+            user_id      TEXT PRIMARY KEY,
+            handle       TEXT UNIQUE,
+            handle_lc    TEXT UNIQUE,
+            bio          TEXT,
+            is_public    INTEGER DEFAULT 0,
+            bets_private INTEGER DEFAULT 0,
+            created_at   {num} NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS comments (
@@ -273,6 +275,8 @@ def init(db_path=DB_PATH):
             thread      TEXT NOT NULL,
             body        TEXT NOT NULL,
             status      TEXT NOT NULL DEFAULT 'visible',
+            ref_ticker  TEXT,
+            ref_title   TEXT,
             created_at  {num} NOT NULL
         );
 
@@ -346,6 +350,17 @@ def _migrate():
     if "is_public" not in _table_columns("bets"):
         _exec("ALTER TABLE bets ADD COLUMN is_public INTEGER DEFAULT 0")
         _commit()
+    if "hidden" not in _table_columns("bets"):
+        _exec("ALTER TABLE bets ADD COLUMN hidden INTEGER DEFAULT 0")
+        _commit()
+    if "bets_private" not in _table_columns("profiles"):
+        _exec("ALTER TABLE profiles ADD COLUMN bets_private INTEGER DEFAULT 0")
+        _commit()
+    ccols = _table_columns("comments")
+    for col in ("ref_ticker", "ref_title"):
+        if col and col not in ccols:
+            _exec(f"ALTER TABLE comments ADD COLUMN {col} TEXT")
+            _commit()
 
 
 # ---- account -------------------------------------------------------------
@@ -811,7 +826,7 @@ def handle_available(handle, exclude_uid=None):
 
 
 @_with_retry
-def set_profile(uid, handle=None, bio=None, is_public=None):
+def set_profile(uid, handle=None, bio=None, is_public=None, bets_private=None):
     """Create/update a profile. Returns (ok, error). Handle is unique
     (case-insensitive)."""
     with _lock:
@@ -829,6 +844,9 @@ def set_profile(uid, handle=None, bio=None, is_public=None):
         if is_public is not None:
             _exec("UPDATE profiles SET is_public = ? WHERE user_id = ?",
                   (1 if is_public else 0, uid))
+        if bets_private is not None:
+            _exec("UPDATE profiles SET bets_private = ? WHERE user_id = ?",
+                  (1 if bets_private else 0, uid))
         _commit()
         return True, None
 
@@ -845,9 +863,10 @@ def public_profiles():
 
 @_with_retry
 def set_bet_public(bet_id, uid, public):
+    """Per-bet visibility. Bets are public by default; this can hide/unhide one."""
     with _lock:
-        _exec("UPDATE bets SET is_public = ? WHERE id = ? AND user_id = ?",
-              (1 if public else 0, bet_id, uid))
+        _exec("UPDATE bets SET hidden = ? WHERE id = ? AND user_id = ?",
+              (0 if public else 1, bet_id, uid))
         _commit()
 
 
@@ -857,13 +876,14 @@ _FEED_COLS = ("b.id, b.ticker, b.event_ticker, b.title, b.side, b.contracts, "
 
 
 @_with_retry
-def public_feed(limit=50):
-    # A shared bet (b.is_public) shows in the feed by the user's display name
-    # (p.handle). Leaderboard listing (p.is_public) is a separate opt-in.
+def public_feed(limit=80):
+    # Public by default: a bet shows unless it's individually hidden OR the user
+    # turned on "make my bets private". Anonymous users (no profile) still show
+    # (the API renders them as "anonymous").
     with _lock:
         return _query(
-            f"SELECT {_FEED_COLS} FROM bets b JOIN profiles p ON b.user_id = p.user_id "
-            "WHERE b.is_public = 1 AND p.handle IS NOT NULL "
+            f"SELECT {_FEED_COLS} FROM bets b LEFT JOIN profiles p ON b.user_id = p.user_id "
+            "WHERE b.hidden = 0 AND (p.bets_private IS NULL OR p.bets_private = 0) "
             "ORDER BY b.placed_at DESC LIMIT ?", (limit,))
 
 
@@ -871,19 +891,30 @@ def public_feed(limit=50):
 def public_bets_for_user(uid, limit=50):
     with _lock:
         return _query(
-            f"SELECT {_FEED_COLS} FROM bets b JOIN profiles p ON b.user_id = p.user_id "
-            "WHERE b.user_id = ? AND b.is_public = 1 "
+            f"SELECT {_FEED_COLS} FROM bets b LEFT JOIN profiles p ON b.user_id = p.user_id "
+            "WHERE b.user_id = ? AND b.hidden = 0 "
             "ORDER BY b.placed_at DESC LIMIT ?", (uid, limit))
 
 
 # ---- comments ------------------------------------------------------------
 
 @_with_retry
-def add_comment(uid, thread, body):
+def add_comment(uid, thread, body, ref_ticker=None, ref_title=None):
     with _lock:
         return _insert(
-            "INSERT INTO comments (user_id, thread, body, status, created_at) "
-            "VALUES (?,?,?, 'visible', ?)", (uid, thread, body, time.time()))
+            "INSERT INTO comments (user_id, thread, body, status, ref_ticker, "
+            "ref_title, created_at) VALUES (?,?,?, 'visible', ?,?,?)",
+            (uid, thread, body, ref_ticker, ref_title, time.time()))
+
+
+@_with_retry
+def all_comments(limit=80):
+    """Most-recent comments across the whole site (for the global activity view)."""
+    with _lock:
+        return _query(
+            "SELECT c.id, c.user_id, c.body, c.created_at, c.ref_ticker, c.ref_title, "
+            "p.handle FROM comments c LEFT JOIN profiles p ON c.user_id = p.user_id "
+            "WHERE c.status = 'visible' ORDER BY c.created_at DESC LIMIT ?", (limit,))
 
 
 @_with_retry

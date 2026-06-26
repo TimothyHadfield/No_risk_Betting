@@ -34,10 +34,10 @@
     </div>`;
   }
 
-  // helper: share-to-feed toggle button
+  // helper: per-bet visibility toggle (bets are PUBLIC by default)
   function shareBtn(b) {
-    const on = !!b.is_public;
-    return `<button class="btn btn-ghost pf-share ${on ? "on" : ""}" data-id="${fmt.esc(b.id)}" data-pub="${on ? 1 : 0}" title="Show this bet on the public feed">${on ? "✓ Shared" : "Share"}</button>`;
+    const pub = !b.hidden;
+    return `<button class="btn btn-ghost pf-share ${pub ? "on" : ""}" data-id="${fmt.esc(b.id)}" data-pub="${pub ? 1 : 0}" title="Toggle whether this bet shows on the public feed">${pub ? "Public" : "Hidden"}</button>`;
   }
 
   // helper: a clickable title cell with icon + flags
@@ -358,9 +358,9 @@
         if (r && r.ok) {
           btn.dataset.pub = makePublic ? "1" : "0";
           btn.classList.toggle("on", makePublic);
-          btn.textContent = makePublic ? "✓ Shared" : "Share";
-          NRB.toast(makePublic ? "Shared to the community feed." : "Removed from the feed.");
-        } else { NRB.toast((r && r.error) || "Couldn't update sharing."); }
+          btn.textContent = makePublic ? "Public" : "Hidden";
+          NRB.toast(makePublic ? "Bet is now public." : "Bet hidden from the feed.");
+        } else { NRB.toast((r && r.error) || "Couldn't update visibility."); }
       } catch (e) { NRB.toast("Couldn't update sharing."); }
       finally { btn.disabled = false; }
     },

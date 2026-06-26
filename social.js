@@ -10,7 +10,9 @@
   const pct = (v) => (v == null ? "—" : (v * 100).toFixed(0) + "%");
   const roiPct = (v) => (v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%");
   const handleLink = (h) =>
-    h ? `<a class="so-handle" data-handle="${fmt.esc(h)}">${fmt.esc(h)}</a>` : `<span class="muted">anonymous</span>`;
+    (h && h.toLowerCase() !== "anonymous")
+      ? `<a class="so-handle" data-handle="${fmt.esc(h)}">${fmt.esc(h)}</a>`
+      : `<span class="muted">anonymous</span>`;
 
   // ---- a public bet card (feed + profile) ---------------------------------
   function betCard(b) {
@@ -68,7 +70,7 @@
 
   // ---- reusable comments thread ------------------------------------------
   NRB.social = NRB.social || {};
-  NRB.social.mountThread = function (host, thread) {
+  NRB.social.mountThread = function (host, thread, ctx) {
     const wrap = el(`<section class="so-thread card"></section>`);
     wrap.innerHTML = `
       <div class="so-thread-head">
@@ -79,11 +81,12 @@
         <div class="skeleton" style="height:60px"></div>
       </div>`;
     host.appendChild(wrap);
-    renderComposer(wrap, thread);
+    renderComposer(wrap, thread, ctx || {});
     loadComments(wrap, thread);
   };
 
-  function renderComposer(wrap, thread) {
+  function renderComposer(wrap, thread, ctx) {
+    ctx = ctx || {};
     const box = wrap.querySelector("#so-composer");
     if (!NRB.auth.isLoggedIn()) {
       box.innerHTML = `<button class="btn btn-block" id="so-login">Log in to join the discussion</button>`;
@@ -108,7 +111,8 @@
       if (!body) return;
       post.disabled = true;
       try {
-        const r = await NRB.api("/api/comments", { method: "POST", body: { thread, body } });
+        const r = await NRB.api("/api/comments", { method: "POST",
+          body: { thread, body, ticker: ctx.ticker, title: ctx.title } });
         if (r && r.ok) { input.value = ""; loadComments(wrap, thread); }
         else NRB.toast((r && r.error) || "Couldn't post.");
       } catch (e) { NRB.toast("Couldn't post."); }
@@ -177,7 +181,8 @@
           <div id="so-profile-card"></div>
           <div class="so-tabs">
             <button class="so-tab" data-tab="leaderboard">Leaderboard</button>
-            <button class="so-tab" data-tab="feed">Live feed</button>
+            <button class="so-tab" data-tab="feed">All bets</button>
+            <button class="so-tab" data-tab="comments">All comments</button>
           </div>
           <div id="so-tabbody"></div>
         </div>`;
@@ -192,6 +197,7 @@
         t.classList.toggle("active", t.dataset.tab === this.tab));
       const body = container.querySelector("#so-tabbody");
       if (this.tab === "feed") loadFeed(body);
+      else if (this.tab === "comments") loadAllComments(body);
       else loadLeaderboard(body);
     },
 
@@ -218,7 +224,9 @@
         <label class="so-field"><span>Bio <em class="muted">(optional)</em></span>
           <input id="so-bio" maxlength="200" placeholder="A line about your forecasting" value="${fmt.esc(p.bio || "")}"></label>
         <label class="so-check"><input type="checkbox" id="so-public" ${p.is_public ? "checked" : ""}>
-          <span>Show me on the public leaderboard & feed</span></label>
+          <span>Show me on the public leaderboard</span></label>
+        <label class="so-check"><input type="checkbox" id="so-betspriv" ${p.bets_private ? "checked" : ""}>
+          <span>Make my bets private (hide them from the public feed)</span></label>
         <div class="so-pe-err muted" id="so-pe-err"></div>
         <button class="btn btn-primary btn-block" id="so-save">Save profile</button>`;
       host.innerHTML = "";
@@ -229,10 +237,11 @@
         const handle = card.querySelector("#so-handle").value.trim();
         const bio = card.querySelector("#so-bio").value.trim();
         const is_public = card.querySelector("#so-public").checked;
+        const bets_private = card.querySelector("#so-betspriv").checked;
         const errEl = card.querySelector("#so-pe-err"); errEl.textContent = "";
         const btn = card.querySelector("#so-save"); btn.disabled = true;
         try {
-          const r = await NRB.api("/api/me/profile", { method: "POST", body: { handle, bio, is_public } });
+          const r = await NRB.api("/api/me/profile", { method: "POST", body: { handle, bio, is_public, bets_private } });
           if (r && r.ok) {
             NRB.toast("Profile saved.");
             if (r.handle != null) NRB.auth.setDisplay(r.handle);  // update header button + drawer
@@ -305,6 +314,44 @@
     body.innerHTML = `<div class="so-feed"></div>`;
     const feed = body.querySelector(".so-feed");
     bets.forEach((b) => feed.appendChild(betCard(b)));
+  }
+
+  async function loadAllComments(body) {
+    body.innerHTML = `<div class="skeleton" style="height:200px"></div>`;
+    let data;
+    try { data = await NRB.api("/api/comments/all"); }
+    catch (e) { body.innerHTML = `<p class="muted">Couldn't load comments.</p>`; return; }
+    const comments = (data && data.comments) || [];
+    if (!comments.length) {
+      body.innerHTML = `<div class="card so-empty-card"><p class="muted">No comments yet. Open any market and start the discussion.</p></div>`;
+      return;
+    }
+    body.innerHTML = `<div class="so-feed"></div>`;
+    const list = body.querySelector(".so-feed");
+    comments.forEach((c) => list.appendChild(globalCommentCard(c)));
+  }
+
+  function globalCommentCard(c) {
+    const card = el(`<div class="so-bet card"></div>`);
+    const onMkt = c.ref_ticker
+      ? `<a class="so-mkt" data-ticker="${fmt.esc(c.ref_ticker)}">on ${fmt.esc(c.ref_title || c.ref_ticker)}</a>`
+      : `<span class="muted">on a market</span>`;
+    card.innerHTML = `
+      <div class="so-bet-top">
+        ${handleLink(c.handle)}
+        <span class="muted so-ago">${fmt.timeAgo(c.created_at)}</span>
+      </div>
+      <div class="so-gc-body">${fmt.esc(c.body)}</div>
+      <div class="so-bet-foot">
+        ${onMkt}
+        <button class="so-like ${c.liked ? "on" : ""}" data-type="comment" data-id="${c.id}">▲ <span class="so-like-n">${c.likes || 0}</span></button>
+      </div>`;
+    const mk = card.querySelector(".so-mkt");
+    if (mk) mk.addEventListener("click", () => NRB.openMarket(c.ref_ticker));
+    const hl = card.querySelector(".so-handle");
+    if (hl) hl.addEventListener("click", () => NRB.go("user", { handle: c.handle }));
+    wireLike(card.querySelector(".so-like"));
+    return card;
   }
 
   // ---- public profile view ------------------------------------------------

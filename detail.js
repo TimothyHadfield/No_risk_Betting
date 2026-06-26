@@ -1389,7 +1389,11 @@
 
       // community discussion for this market (one thread per event)
       if (NRB.social && NRB.social.mountThread) {
-        try { NRB.social.mountThread(container, "mkt:" + eventTicker()); } catch (e) {}
+        try {
+          const title = (S.event_title) || (S.market && S.market.title) || S.ticker;
+          NRB.social.mountThread(container, "mkt:" + eventTicker(),
+            { ticker: S.ticker, title: title });
+        } catch (e) {}
       }
     },
 

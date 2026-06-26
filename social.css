@@ -92,7 +92,10 @@
 .so-pip.loss { background: var(--no, #e5484d); color: #2a0508; }
 .so-empty-card { padding: 22px; text-align: center; }
 
-/* shared-bet toggle in the portfolio */
+/* global comment cards (Community → All comments) */
+.so-gc-body { font-size: 14.5px; line-height: 1.5; margin: 8px 0; white-space: pre-wrap; word-break: break-word; }
+
+/* per-bet visibility toggle in the portfolio */
 .pf-share.on { color: var(--accent); border-color: var(--accent); }
 
 @media (max-width: 560px) {
