@@ -307,7 +307,6 @@
           <tr data-id="${fmt.esc(b.id)}">
             ${titleCell(b)}
             <td>${sideBadge(b.side)}</td>
-            <td class="tnum">${fmt.esc(b.contracts)}</td>
             <td class="tnum">${oddsCell(b.avg_price)}</td>
             <td class="tnum">${oddsCell(b.current_price)}</td>
             <td class="tnum">${fmt.usd(b.current_value)}</td>
@@ -325,7 +324,7 @@
           <table class="pf-table">
             <thead>
               <tr>
-                <th>Market</th><th>Side</th><th class="tnum">Qty</th>
+                <th>Market</th><th>Side</th>
                 <th class="tnum">Entry ${NRB.help("entry")}</th><th class="tnum">Now ${NRB.help("now_price")}</th>
                 <th class="tnum">Value ${NRB.help("value")}</th><th class="tnum">Unreal. P&amp;L ${NRB.help("unrealized_pnl")}</th><th></th>
               </tr>
@@ -391,7 +390,6 @@
           <tr>
             ${titleCell(b)}
             <td>${sideBadge(b.side)}</td>
-            <td class="tnum">${fmt.esc(b.contracts)}</td>
             <td class="tnum">${oddsCell(b.avg_price)}</td>
             <td><span class="pf-outcome ${oc}">${outcome}</span></td>
             <td class="tnum">${fmt.usd(b.payout)}</td>
@@ -405,7 +403,7 @@
           <table class="pf-table">
             <thead>
               <tr>
-                <th>Market</th><th>Side</th><th class="tnum">Qty</th>
+                <th>Market</th><th>Side</th>
                 <th class="tnum">Entry ${NRB.help("entry")}</th><th>Outcome</th>
                 <th class="tnum">Payout ${NRB.help("payout")}</th><th class="tnum">Realized P&amp;L ${NRB.help("realized_pnl")}</th><th></th>
               </tr>
