@@ -584,7 +584,7 @@
         const initials = dn.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || dn.slice(0, 2).toUpperCase();
         h.innerHTML = `<span class="hdr-acct-dot">${esc(initials)}</span><span class="hdr-acct-name">${esc(dn)}</span>`;
       } else {
-        h.textContent = "Create account";
+        h.textContent = "Create account / Sign in";
       }
     }
   }
@@ -694,7 +694,7 @@
     updateDrawerAuth();
     NRB.auth.sync();   // refresh display name / login from the server
     const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
-    on("hdr-account", "click", () => authOpen(NRB.auth.isLoggedIn() ? "account" : "signup"));
+    on("hdr-account", "click", () => authOpen(NRB.auth.isLoggedIn() ? "account" : "login"));
     on("auth-close", "click", authClose);
     const aOv = $("auth-modal");
     if (aOv) aOv.addEventListener("click", (e) => { if (e.target === aOv) authClose(); });
