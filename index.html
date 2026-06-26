@@ -57,7 +57,7 @@
     <div class="drawer-item" data-action="predict"><span class="ic">🔮</span> Predict-then-bet: <span id="predict-label">On</span></div>
     <div class="drawer-item" data-action="theme"><span class="ic">🌓</span> Theme: <span id="theme-label">Dark</span></div>
     <div class="drawer-item" data-action="notifications"><span class="ic">🔔</span> Notifications</div>
-    <div class="drawer-item" data-action="account"><span class="ic">👤</span> Account</div>
+    <div class="drawer-item" data-action="account"><span class="ic">👤</span> <span id="drawer-account-label">Log in / Sign up</span></div>
     <div class="drawer-item" data-action="settings"><span class="ic">⚙️</span> Settings</div>
     <div class="drawer-item" data-action="reset"><span class="ic">↺</span> Reset balance</div>
     <div class="drawer-foot">Private, personal use. Not affiliated with Kalshi.</div>
@@ -74,10 +74,34 @@
         <li><b>Real, live odds</b> from Kalshi — with <b>zero real money</b>.</li>
         <li>Bet a virtual <b>$1,000</b>, follow games live, and build parlays.</li>
         <li>The point: <b>track whether your predictions are actually right</b> — see your Forecasting Score.</li>
-        <li>Your account is private to this browser. Nothing to sign up for.</li>
+        <li>Starts private to this browser — <b>create a free account</b> anytime to save your bets and use them on any device.</li>
       </ul>
       <button id="onboard-go" class="btn btn-primary btn-block">Start with $1,000</button>
       <p class="onboard-fine">Practice tool · not betting advice · not affiliated with Kalshi</p>
+    </div>
+  </div>
+
+  <!-- account: log in / sign up (optional cross-device sync) -->
+  <div id="auth-modal" class="auth-overlay hidden">
+    <div class="auth-box">
+      <button class="auth-close" id="auth-close" aria-label="Close">×</button>
+      <div class="auth-mark">◆</div>
+      <h2 id="auth-title">Log in</h2>
+      <p class="auth-sub" id="auth-sub">Save your bets and balance, and use them on any device.</p>
+      <div id="auth-forms">
+        <input id="auth-email" class="auth-input" type="email" placeholder="Email" autocomplete="email" autocapitalize="none" spellcheck="false">
+        <input id="auth-pass" class="auth-input" type="password" placeholder="Password (6+ characters)" autocomplete="current-password">
+        <div id="auth-error" class="auth-error hidden"></div>
+        <button id="auth-submit" class="btn btn-primary btn-block">Log in</button>
+        <p class="auth-switch"><span id="auth-switch-text">New here?</span>
+          <a href="#" id="auth-switch-link">Create an account</a></p>
+      </div>
+      <div id="auth-account" class="hidden">
+        <p class="auth-signed">Signed in as <b id="auth-email-label"></b></p>
+        <p class="auth-sub">Your bets and balance sync to this account on any device you log in from.</p>
+        <button id="auth-logout" class="btn btn-block">Log out</button>
+      </div>
+      <p class="auth-fine">We store only your email and a salted, encrypted password — no real money, no third parties.</p>
     </div>
   </div>
 

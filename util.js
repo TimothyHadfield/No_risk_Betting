@@ -21,6 +21,12 @@
   }
   NRB.uid = getUid;
 
+  // ---- optional account session token (cross-device login) -----------------
+  function getToken() { try { return localStorage.getItem("nrb_token") || ""; } catch (e) { return ""; } }
+  function setToken(t) {
+    try { t ? localStorage.setItem("nrb_token", t) : localStorage.removeItem("nrb_token"); } catch (e) {}
+  }
+
   // ---- HTTP ----------------------------------------------------------------
   function netBanner(show) {
     const b = document.getElementById("net-banner");
@@ -29,6 +35,8 @@
   NRB.api = async function (path, opts) {
     opts = opts || {};
     opts.headers = Object.assign({ "X-User-Id": getUid() }, opts.headers || {});
+    const tok = getToken();
+    if (tok) opts.headers["X-Session-Token"] = tok;
     if (opts.body && typeof opts.body !== "string") {
       opts.body = JSON.stringify(opts.body);
       opts.headers["Content-Type"] = "application/json";
@@ -283,6 +291,38 @@
     return NRB.state.account;
   };
 
+  // ---- auth (optional cross-device accounts) -------------------------------
+  function applyLogin(r) {
+    setToken(r.token);
+    try { localStorage.setItem("nrb_email", r.email || ""); } catch (e) {}
+    // Align the anonymous fallback id with the account so views that read the
+    // raw uid stay consistent while logged in.
+    try { localStorage.setItem("nrb_uid", r.user_id); } catch (e) {}
+  }
+  NRB.auth = {
+    isLoggedIn: () => !!getToken(),
+    email: () => { try { return localStorage.getItem("nrb_email") || ""; } catch (e) { return ""; } },
+    signup: async (email, password) => {
+      const r = await NRB.api("/api/auth/signup", { method: "POST", body: { email, password } });
+      if (r && r.ok) applyLogin(r);
+      return r;
+    },
+    login: async (email, password) => {
+      const r = await NRB.api("/api/auth/login", { method: "POST", body: { email, password } });
+      if (r && r.ok) applyLogin(r);
+      return r;
+    },
+    logout: async () => {
+      try { await NRB.api("/api/auth/logout", { method: "POST" }); } catch (e) {}
+      setToken("");
+      // Drop the account identity and start a fresh anonymous session so the
+      // next visitor on this browser doesn't see the account's data.
+      try { localStorage.removeItem("nrb_email"); localStorage.removeItem("nrb_uid"); } catch (e) {}
+      getUid();  // regenerate a new anonymous id
+      await NRB.refreshAccount();
+    },
+  };
+
   // ---- toast ---------------------------------------------------------------
   let toastTimer;
   NRB.toast = function (msg, ms = 2800) {
@@ -357,6 +397,7 @@
     if (action === "theme") { NRB.toggleTheme(); return; }  // keep drawer open
     if (action === "predict") { NRB.predict.toggle(); return; }  // keep drawer open
     NRB.drawer.close();
+    if (action === "account") return authOpen("login");
     if (action === "home") return NRB.go("browse");
     if (action === "watchlist") return NRB.go("watchlist");
     if (action === "activity") return NRB.go("portfolio");
@@ -365,6 +406,69 @@
     if (action === "reset") return resetFlow();
     NRB.toast(action.charAt(0).toUpperCase() + action.slice(1) + " — coming soon");
   }
+  // ---- auth modal (login / sign up) ----------------------------------------
+  let authMode = "login";
+  function $(id) { return document.getElementById(id); }
+  function setAuthError(msg) {
+    const e = $("auth-error"); if (!e) return;
+    e.textContent = msg || ""; e.classList.toggle("hidden", !msg);
+  }
+  function refreshAuthModal() {
+    const forms = $("auth-forms"), acct = $("auth-account");
+    if (!forms || !acct) return;
+    setAuthError("");
+    if (NRB.auth.isLoggedIn()) {
+      forms.classList.add("hidden"); acct.classList.remove("hidden");
+      $("auth-title").textContent = "Account";
+      $("auth-sub").classList.add("hidden");
+      $("auth-email-label").textContent = NRB.auth.email() || "your account";
+      return;
+    }
+    forms.classList.remove("hidden"); acct.classList.add("hidden");
+    $("auth-sub").classList.remove("hidden");
+    const signup = authMode === "signup";
+    $("auth-title").textContent = signup ? "Create account" : "Log in";
+    $("auth-submit").textContent = signup ? "Create account" : "Log in";
+    $("auth-pass").autocomplete = signup ? "new-password" : "current-password";
+    $("auth-switch-text").textContent = signup ? "Already have an account?" : "New here?";
+    $("auth-switch-link").textContent = signup ? "Log in" : "Create an account";
+  }
+  function authOpen(mode) {
+    authMode = mode || "login";
+    const m = $("auth-modal"); if (!m) return;
+    refreshAuthModal(); m.classList.remove("hidden");
+    if (!NRB.auth.isLoggedIn()) { const f = $("auth-email"); if (f) setTimeout(() => f.focus(), 40); }
+  }
+  function authClose() { const m = $("auth-modal"); if (m) m.classList.add("hidden"); }
+  function updateDrawerAuth() {
+    const l = $("drawer-account-label");
+    if (l) l.textContent = NRB.auth.isLoggedIn() ? (NRB.auth.email() || "Account") : "Log in / Sign up";
+  }
+  NRB.authUI = { open: authOpen, close: authClose, refreshDrawer: updateDrawerAuth };
+  async function authSubmit() {
+    const email = ($("auth-email").value || "").trim();
+    const pass = $("auth-pass").value || "";
+    if (!email || !pass) { setAuthError("Enter your email and password."); return; }
+    const btn = $("auth-submit"); btn.disabled = true;
+    try {
+      const r = authMode === "signup"
+        ? await NRB.auth.signup(email, pass)
+        : await NRB.auth.login(email, pass);
+      if (r && r.ok) {
+        authClose();
+        $("auth-pass").value = "";
+        NRB.toast(authMode === "signup" ? "Account created — your bets are saved." : "Logged in.");
+        updateDrawerAuth();
+        await NRB.refreshAccount();
+        NRB.go(NRB.current.name || "browse", NRB.current.params);
+      } else {
+        setAuthError((r && r.error) || "Something went wrong. Try again.");
+      }
+    } catch (e) {
+      setAuthError("Can't reach the server. Try again.");
+    } finally { btn.disabled = false; }
+  }
+
   async function resetFlow() {
     if (!confirm("Reset virtual balance to $1,000 and delete all bets?")) return;
     await NRB.api("/api/account/reset", { method: "POST", body: { starting: 1000 } });
@@ -382,6 +486,24 @@
       it.addEventListener("click", () => drawerAction(it.dataset.action)));
     const brand = document.getElementById("brand");
     if (brand) brand.addEventListener("click", () => NRB.go("browse"));
+
+    // auth modal wiring
+    updateDrawerAuth();
+    const aClose = $("auth-close"); if (aClose) aClose.addEventListener("click", authClose);
+    const aOv = $("auth-modal");
+    if (aOv) aOv.addEventListener("click", (e) => { if (e.target === aOv) authClose(); });
+    const aSubmit = $("auth-submit"); if (aSubmit) aSubmit.addEventListener("click", authSubmit);
+    const aSwitch = $("auth-switch-link");
+    if (aSwitch) aSwitch.addEventListener("click", (e) => {
+      e.preventDefault(); authMode = authMode === "signup" ? "login" : "signup"; refreshAuthModal();
+    });
+    const aPass = $("auth-pass");
+    if (aPass) aPass.addEventListener("keydown", (e) => { if (e.key === "Enter") authSubmit(); });
+    const aLogout = $("auth-logout");
+    if (aLogout) aLogout.addEventListener("click", async () => {
+      await NRB.auth.logout(); updateDrawerAuth(); refreshAuthModal(); authClose();
+      NRB.toast("Logged out."); NRB.go("browse");
+    });
 
     // first-run onboarding (once per browser)
     let onboarded = false;

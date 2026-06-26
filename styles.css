@@ -183,6 +183,29 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 .onboard-list b { color: var(--text); }
 .onboard-fine { color: var(--faint); font-size: 11px; margin: 12px 0 0; }
 
+/* account: log in / sign up modal */
+.auth-overlay { position: fixed; inset: 0; z-index: 120; display: flex;
+  align-items: center; justify-content: center; padding: 18px;
+  background: rgba(0, 0, 0, .66); backdrop-filter: blur(3px); }
+.auth-box { position: relative; background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 26px 24px;
+  max-width: 380px; width: 100%; text-align: center; }
+.auth-close { position: absolute; top: 8px; right: 10px; background: none; border: none;
+  color: var(--muted); font-size: 26px; line-height: 1; cursor: pointer; padding: 4px 8px; }
+.auth-close:hover { color: var(--text); }
+.auth-mark { color: var(--accent); font-size: 28px; }
+.auth-box h2 { font-size: 21px; margin: 4px 0 6px; }
+.auth-sub { color: var(--muted); font-size: 13.5px; margin: 0 0 16px; line-height: 1.5; }
+.auth-input { margin-bottom: 10px; }
+.auth-error { background: var(--no-soft); color: var(--no); border-radius: var(--radius-sm);
+  font-size: 13px; padding: 8px 11px; margin-bottom: 10px; text-align: left; }
+.auth-switch { color: var(--muted); font-size: 13px; margin: 14px 0 0; }
+.auth-switch a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.auth-switch a:hover { text-decoration: underline; }
+.auth-signed { font-size: 15px; margin: 4px 0 6px; }
+.auth-signed b { color: var(--accent); }
+.auth-fine { color: var(--faint); font-size: 11px; margin: 16px 0 0; line-height: 1.5; }
+
 /* ---------- icons: flag emoji + monogram badge ---------- */
 .icoflag { font-size: 18px; line-height: 1; width: 22px; text-align: center; display: inline-block; }
 .icoflag-img { width: 22px; height: 16px; object-fit: cover; border-radius: 3px;

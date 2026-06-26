@@ -14,6 +14,7 @@ PRIVATE / PERSONAL USE ONLY -- see the data-terms note in kalshi.py.
 
 import json
 import os
+import re
 import threading
 import time
 import urllib.parse
@@ -270,6 +271,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_summary()
         if path == "/api/analytics":
             return self.api_analytics()
+        if path == "/api/auth/me":
+            return self.api_me()
         return self._send_json({"error": "not found"}, 404)
 
     def _post_route(self):
@@ -277,6 +280,12 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
         body = self._body()
 
+        if path == "/api/auth/signup":
+            return self.api_signup(body)
+        if path == "/api/auth/login":
+            return self.api_login(body)
+        if path == "/api/auth/logout":
+            return self.api_logout()
         if path == "/api/bets":
             return self.api_place_bet(body)
         if path == "/api/settle":
@@ -304,11 +313,20 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return -1
 
-    def _uid(self):
-        """Anonymous per-browser user id from the X-User-Id header."""
+    def _anon_uid(self):
+        """The raw per-browser id from the X-User-Id header (no session)."""
         raw = self.headers.get("X-User-Id") or ""
         uid = "".join(c for c in raw if c.isalnum() or c in "-_")[:64]
-        return uid or "anon"
+        return uid or None
+
+    def _uid(self):
+        """The effective user id for this request: a logged-in account (resolved
+        from the X-Session-Token header) if present and valid, else the anonymous
+        per-browser id from X-User-Id."""
+        uid = db.user_id_for_token(self.headers.get("X-Session-Token") or "")
+        if uid:
+            return uid
+        return self._anon_uid() or "anon"
 
     # ---- API: discovery ----
     def api_categories(self):
@@ -646,6 +664,46 @@ class Handler(BaseHTTPRequestHandler):
         else:
             return self._send_json({"error": "result must be win|lose"}, 400)
         self._send_json({"ok": True, "parlay": db.get_parlay(pid)})
+
+    # ---- API: accounts / login (optional cross-device sync) ----
+    _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+    def api_signup(self, body):
+        email = (body.get("email") or "").strip().lower()
+        password = body.get("password") or ""
+        if not self._EMAIL_RE.match(email):
+            return self._send_json({"error": "Enter a valid email address."}, 400)
+        if len(password) < 6:
+            return self._send_json(
+                {"error": "Password must be at least 6 characters."}, 400)
+        # Reuse this browser's anonymous id so the bets/balance already placed
+        # carry over into the new account.
+        uid = db.create_user(email, password, claim_uid=self._anon_uid())
+        if not uid:
+            return self._send_json(
+                {"error": "That email is already registered — try logging in."}, 409)
+        token = db.create_session(uid)
+        self._send_json({"ok": True, "token": token, "user_id": uid, "email": email})
+
+    def api_login(self, body):
+        email = (body.get("email") or "").strip().lower()
+        password = body.get("password") or ""
+        uid = db.verify_login(email, password)
+        if not uid:
+            return self._send_json({"error": "Wrong email or password."}, 401)
+        token = db.create_session(uid)
+        self._send_json({"ok": True, "token": token, "user_id": uid, "email": email})
+
+    def api_logout(self):
+        db.delete_session(self.headers.get("X-Session-Token") or "")
+        self._send_json({"ok": True})
+
+    def api_me(self):
+        uid = db.user_id_for_token(self.headers.get("X-Session-Token") or "")
+        u = db.get_user(uid) if uid else None
+        if not u:
+            return self._send_json({"logged_in": False})
+        self._send_json({"logged_in": True, "email": u["email"], "user_id": uid})
 
     def api_reset(self, body):
         uid = self._uid()

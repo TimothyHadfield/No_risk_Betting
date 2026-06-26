@@ -1,2 +1,7 @@
-# No third-party dependencies — Python standard library only.
-# (This file exists so buildpack hosts detect a Python app.)
+# The app itself uses only the Python standard library.
+#
+# The single optional dependency below is the Postgres driver, used ONLY in
+# production when DATABASE_URL is set (e.g. a free Neon/Supabase database). Locally
+# the app uses SQLite and never imports it, so `python server.py` still needs no
+# installs. It's a self-contained binary wheel (no system build tools required).
+psycopg2-binary>=2.9

@@ -2,6 +2,11 @@
 FROM python:3.12-slim
 
 WORKDIR /app
+
+# Install the optional Postgres driver (used only when DATABASE_URL is set).
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY . .
 
 # Hosts (Render/Railway/Fly/etc.) inject $PORT; the server reads it.

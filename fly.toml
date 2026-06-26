@@ -1,0 +1,45 @@
+# Fly.io config for No-Risk Betting.
+#
+# This is the recommended host for cross-device accounts: it gives a free
+# PERSISTENT VOLUME (mounted at /data) so the SQLite database — including user
+# accounts, bets, and balances — survives restarts and redeploys.
+#
+# 'app' must be globally unique on Fly. If "no-risk-betting" is taken, change it
+# here (or let `fly launch` pick one) and use that name everywhere below.
+app = "no-risk-betting"
+primary_region = "iad"   # change to a region near you, e.g. "lhr" (London), "sjc" (US-West)
+
+[build]
+  # Uses the existing Dockerfile in this folder.
+
+[env]
+  HOST = "0.0.0.0"
+  PORT = "8080"
+  NRB_DB = "/data/data.db"   # lives on the persistent volume below
+
+# Persistent disk for the SQLite database. Create it once with:
+#   fly volumes create data --size 1 --region iad
+[mounts]
+  source = "data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Scale to zero when idle to stay within the free allowance; wakes on request.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/healthz"
+
+# Keep a single small machine so the volume isn't split across instances
+# (SQLite is a single file on one disk).
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
