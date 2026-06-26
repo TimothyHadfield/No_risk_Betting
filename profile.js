@@ -27,10 +27,10 @@
     return { text: "Needs work", cls: "prof-tag-weak" };
   }
 
-  function metric(label, value, cls, hint) {
+  function metric(label, value, cls, hint, helpKey) {
     return `
       <div class="card prof-metric">
-        <div class="prof-metric-label">${fmt.esc(label)}</div>
+        <div class="prof-metric-label">${fmt.esc(label)}${helpKey ? NRB.help(helpKey) : ""}</div>
         <div class="prof-metric-value tnum ${cls || ""}">${value}</div>
         ${hint ? `<div class="prof-metric-hint muted">${fmt.esc(hint)}</div>` : ""}
       </div>`;
@@ -228,7 +228,7 @@
       const lab = brierLabel(a.brier);
       hero.innerHTML = `
         <div class="card prof-hero">
-          <div class="prof-hero-cap section-title">Your Brier score</div>
+          <div class="prof-hero-cap section-title">Your Brier score ${NRB.help("brier")}</div>
           <div class="prof-hero-row">
             <div class="prof-hero-big tnum">${fmt3(a.brier)}</div>
             <span class="prof-tag ${lab.cls}">${lab.text}</span>
@@ -258,9 +258,9 @@
 
       wrap.innerHTML = `
         <div class="prof-metrics">
-          ${metric("Realized P&L", fmt.signed(a.realized_pnl), fmt.cls(a.realized_pnl), "if these bets were real")}
-          ${metric("ROI", pct1(a.roi), fmt.cls(a.roi), "return on what you wagered")}
-          ${metric("Total wagered", fmt.usd(a.invested), "", "money you'd have put at risk")}
+          ${metric("Realized P&L", fmt.signed(a.realized_pnl), fmt.cls(a.realized_pnl), "if these bets were real", "realized_pnl")}
+          ${metric("ROI", pct1(a.roi), fmt.cls(a.roi), "return on what you wagered", "roi")}
+          ${metric("Total wagered", fmt.usd(a.invested), "", "money you'd have put at risk", "stake")}
           ${metric(
             "Equity vs start",
             (eqDelta == null ? "—" : fmt.signed(eqDelta)),

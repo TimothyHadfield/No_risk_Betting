@@ -280,6 +280,66 @@
     return t.content.firstElementChild;
   };
 
+  // ---- help glossary + clickable "?" popovers -------------------------------
+  // Plain-language definitions for an audience new to betting/forecasting terms.
+  NRB.glossary = {
+    cash: { t: "Cash", b: "Your spendable virtual balance — money that isn't currently tied up in open bets." },
+    equity: { t: "Equity", b: "Your total account value: cash plus what all your open bets are worth right now. It's what you'd have if you sold everything this instant." },
+    unrealized_pnl: { t: "Unrealized P&L", b: "P&L means Profit & Loss. This is how much you're up or down on bets you still hold but haven't closed. It's 'unrealized' because it isn't locked in — it keeps moving with the market until you sell or the bet settles." },
+    realized_pnl: { t: "Realized P&L", b: "Profit or loss that's locked in from bets you've already sold or that have settled. This is your actual result, not a paper estimate." },
+    open_positions: { t: "Open positions", b: "Bets you currently hold that haven't settled or been sold yet." },
+    entry: { t: "Entry", b: "The price (and implied odds) you got when you placed the bet." },
+    now_price: { t: "Now", b: "The latest market price for this outcome." },
+    value: { t: "Value", b: "What your position is worth right now if you sold it at the current market price." },
+    payout: { t: "Payout", b: "The cash you received when the bet settled or you sold it." },
+    stake: { t: "Stake", b: "The amount of virtual money you put on a bet." },
+    multiplier: { t: "Multiplier (odds)", b: "How much each $1 returns if the bet wins. 2.0× means a winning $10 bet pays back $20. It's simply 1 ÷ the price." },
+    probability: { t: "Probability", b: "The market's implied chance of this outcome happening, taken from the price — a 40¢ price means roughly a 40% chance." },
+    roi: { t: "ROI", b: "Return on Investment: your total profit divided by the total you've invested, shown as a %. +20% means you've made 20% on the money you put at risk." },
+    win_rate: { t: "Win rate", b: "The share of your settled bets that won." },
+    brier: { t: "Brier score", b: "A measure of how accurate your probability forecasts are. 0 is perfect and lower is better; always guessing 50/50 scores about 0.25. It rewards being both confident and correct." },
+    net_pnl: { t: "Net P&L", b: "Your total realized profit or loss across all settled bets." },
+    record: { t: "Record", b: "Your wins and losses on settled bets, shown as W–L." },
+    recent: { t: "Recent form", b: "Your latest settled results, newest first. W = win, L = loss." },
+    scored: { t: "Graded forecasts", b: "How many of your bets had a probability you can be scored on (used for the Brier score)." },
+  };
+  // returns the markup for an inline help button; pair with a label
+  NRB.help = function (key) {
+    if (!NRB.glossary[key]) return "";
+    return `<button class="help-dot" type="button" data-help="${key}" aria-label="What does this mean?">?</button>`;
+  };
+  let _helpAnchor = null;
+  function closeHelp() { const p = document.getElementById("help-pop"); if (p) p.remove(); _helpAnchor = null; }
+  function showHelp(key, anchor) {
+    const g = NRB.glossary[key]; if (!g) return;
+    closeHelp();
+    const pop = document.createElement("div");
+    pop.className = "help-pop"; pop.id = "help-pop";
+    pop.innerHTML = `<div class="help-pop-title">${esc(g.t)}</div><div class="help-pop-body">${esc(g.b)}</div>`;
+    document.body.appendChild(pop);
+    const r = anchor.getBoundingClientRect();
+    const pw = pop.offsetWidth, ph = pop.offsetHeight;
+    const vw = document.documentElement.clientWidth;
+    let left = r.left + window.scrollX + r.width / 2 - pw / 2;
+    left = Math.max(8, Math.min(left, window.scrollX + vw - pw - 8));
+    let top = r.bottom + window.scrollY + 8;
+    if (r.bottom + ph + 16 > window.innerHeight) top = r.top + window.scrollY - ph - 8;
+    pop.style.left = left + "px"; pop.style.top = Math.max(8, top) + "px";
+    _helpAnchor = anchor;
+  }
+  document.addEventListener("click", (e) => {
+    const dot = e.target.closest && e.target.closest(".help-dot");
+    if (dot) {
+      e.preventDefault(); e.stopPropagation();
+      if (_helpAnchor === dot) { closeHelp(); return; }
+      showHelp(dot.dataset.help, dot);
+      return;
+    }
+    if (!e.target.closest || !e.target.closest(".help-pop")) closeHelp();
+  });
+  window.addEventListener("scroll", closeHelp, true);
+  window.addEventListener("resize", closeHelp);
+
   // ---- account state -------------------------------------------------------
   NRB.state = { account: null };
   const acctSubs = [];

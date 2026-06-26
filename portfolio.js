@@ -60,15 +60,15 @@
         <div class="pf">
           <div class="pf-summary card" id="pf-summary">
             <div class="pf-sum-item">
-              <label>Cash</label>
+              <label>Cash ${NRB.help("cash")}</label>
               <span class="tnum" id="pf-cash">—</span>
             </div>
             <div class="pf-sum-item">
-              <label>Open positions</label>
+              <label>Open positions ${NRB.help("open_positions")}</label>
               <span class="tnum" id="pf-open-count">—</span>
             </div>
             <div class="pf-sum-item">
-              <label>Unrealized P&amp;L</label>
+              <label>Unrealized P&amp;L ${NRB.help("unrealized_pnl")}</label>
               <span class="tnum" id="pf-unrealized">—</span>
             </div>
           </div>
@@ -326,8 +326,8 @@
             <thead>
               <tr>
                 <th>Market</th><th>Side</th><th class="tnum">Qty</th>
-                <th class="tnum">Entry</th><th class="tnum">Now</th>
-                <th class="tnum">Value</th><th class="tnum">Unreal. P&amp;L</th><th></th>
+                <th class="tnum">Entry ${NRB.help("entry")}</th><th class="tnum">Now ${NRB.help("now_price")}</th>
+                <th class="tnum">Value ${NRB.help("value")}</th><th class="tnum">Unreal. P&amp;L ${NRB.help("unrealized_pnl")}</th><th></th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -406,8 +406,8 @@
             <thead>
               <tr>
                 <th>Market</th><th>Side</th><th class="tnum">Qty</th>
-                <th class="tnum">Entry</th><th>Outcome</th>
-                <th class="tnum">Payout</th><th class="tnum">Realized P&amp;L</th><th></th>
+                <th class="tnum">Entry ${NRB.help("entry")}</th><th>Outcome</th>
+                <th class="tnum">Payout ${NRB.help("payout")}</th><th class="tnum">Realized P&amp;L ${NRB.help("realized_pnl")}</th><th></th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>

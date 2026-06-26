@@ -200,6 +200,18 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); box-sh
 .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .05em; color: var(--muted); }
 
+/* clickable "?" help dots + popover */
+.help-dot { display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--border-strong);
+  background: transparent; color: var(--muted); font: 700 10px var(--font); line-height: 1;
+  cursor: pointer; padding: 0; margin-left: 5px; vertical-align: middle; flex-shrink: 0; }
+.help-dot:hover { color: var(--accent); border-color: var(--accent); }
+.help-pop { position: absolute; z-index: 130; max-width: 280px; width: max-content;
+  background: var(--bg-elev2); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); padding: 11px 13px; }
+.help-pop-title { font: 700 13.5px var(--font); margin-bottom: 4px; color: var(--text); }
+.help-pop-body { font-size: 13px; line-height: 1.5; color: var(--muted); }
+
 /* connection-lost banner */
 .net-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 95;
   background: var(--gold); color: #1a1205; text-align: center; font-weight: 700;

@@ -268,8 +268,8 @@
         </div>
         <div class="card so-lb">
           <table class="so-lb-table">
-            <thead><tr><th>#</th><th>Forecaster</th><th class="tnum">Record</th>
-              <th class="tnum">ROI</th><th class="tnum">Win%</th><th class="tnum">Brier</th><th class="tnum">Net</th></tr></thead>
+            <thead><tr><th>#</th><th>Forecaster</th><th class="tnum">Record ${NRB.help("record")}</th>
+              <th class="tnum">ROI ${NRB.help("roi")}</th><th class="tnum">Win% ${NRB.help("win_rate")}</th><th class="tnum">Brier ${NRB.help("brier")}</th><th class="tnum">Net ${NRB.help("net_pnl")}</th></tr></thead>
             <tbody>${sorted.map((l, i) => `
               <tr>
                 <td class="so-rank">${i + 1}</td>
@@ -334,11 +334,11 @@
             </div>
           </div>
           <div class="so-stats">
-            <div class="so-stat"><label>Record</label><span class="tnum">${s.wins || 0}-${s.losses || 0}</span></div>
-            <div class="so-stat"><label>ROI</label><span class="tnum ${fmt.cls(s.roi)}">${roiPct(s.roi)}</span></div>
-            <div class="so-stat"><label>Win rate</label><span class="tnum">${pct(s.win_rate)}</span></div>
-            <div class="so-stat"><label>Brier</label><span class="tnum">${s.brier == null ? "—" : s.brier.toFixed(3)}</span></div>
-            <div class="so-stat"><label>Net P&amp;L</label><span class="tnum ${fmt.cls(s.net)}">${fmt.signed(s.net)}</span></div>
+            <div class="so-stat"><label>Record ${NRB.help("record")}</label><span class="tnum">${s.wins || 0}-${s.losses || 0}</span></div>
+            <div class="so-stat"><label>ROI ${NRB.help("roi")}</label><span class="tnum ${fmt.cls(s.roi)}">${roiPct(s.roi)}</span></div>
+            <div class="so-stat"><label>Win rate ${NRB.help("win_rate")}</label><span class="tnum">${pct(s.win_rate)}</span></div>
+            <div class="so-stat"><label>Brier ${NRB.help("brier")}</label><span class="tnum">${s.brier == null ? "—" : s.brier.toFixed(3)}</span></div>
+            <div class="so-stat"><label>Net P&amp;L ${NRB.help("net_pnl")}</label><span class="tnum ${fmt.cls(s.net)}">${fmt.signed(s.net)}</span></div>
           </div>
           ${streak ? `<div class="so-streak"><label class="muted">Recent</label>${streak}</div>` : ""}
         </div>
