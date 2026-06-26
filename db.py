@@ -573,7 +573,7 @@ def get_user(uid):
 
 @_with_retry
 def delete_user(uid):
-    """Permanently remove an account and ALL of its data."""
+    """Permanently remove an account and ALL of its data (including social)."""
     with _lock:
         _exec("DELETE FROM sessions WHERE user_id = ?", (uid,))
         _exec("DELETE FROM bets WHERE user_id = ?", (uid,))
@@ -581,6 +581,10 @@ def delete_user(uid):
         _exec("DELETE FROM parlay_legs WHERE parlay_id IN "
               "(SELECT id FROM parlays WHERE user_id = ?)", (uid,))
         _exec("DELETE FROM parlays WHERE user_id = ?", (uid,))
+        _exec("DELETE FROM comments WHERE user_id = ?", (uid,))
+        _exec("DELETE FROM reactions WHERE user_id = ?", (uid,))
+        _exec("DELETE FROM reports WHERE reporter_id = ?", (uid,))
+        _exec("DELETE FROM profiles WHERE user_id = ?", (uid,))
         _exec("DELETE FROM accounts WHERE user_id = ?", (uid,))
         _exec("DELETE FROM users WHERE user_id = ?", (uid,))
         _commit()
