@@ -78,20 +78,35 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   **team logos** (Kalshi has neither). Matches a Kalshi game to an ESPN game by team
   names (with normalization + alias map). `game_state()` and `logo_for()`.
 - **SOCIAL LAYER (added & live 2026-06-26):** `db.py` tables `profiles`
-  (user_id, unique handle/handle_lc, bio, is_public), `comments` (thread, body,
-  status), `reactions` (unique per user/target/kind), `reports`; plus `bets.is_public`
-  (migrated). Privacy rule: **only `handle`/`bio` are ever exposed publicly** — never
-  email/login/user_id. `server.py` endpoints: `GET/POST /api/me/profile`,
-  `GET /api/u/{handle}`, `GET /api/leaderboard` (30s cache; ranks public profiles by
-  ROI/Brier/win-rate via analytics.summary), `GET /api/feed`, `GET /api/comments` +
-  `POST /api/comments` (+`/{id}/delete`, `/{id}/report`), `POST /api/reactions`,
-  `POST /api/bets/{id}/public` (share toggle). Moderation: per-user/admin delete,
-  reports, tiny slur blocklist, all rate-limited; `ADMIN_HANDLES` env lists
-  moderators. Frontend `social.js`/`social.css`: **Community** page (profile editor +
-  leaderboard + live feed), public profile view (`NRB.views.user`), a reusable
-  comments thread mounted on every market-detail page (thread = `mkt:<event_ticker>`),
-  like buttons, and a **Share** toggle in the portfolio. `delete_user` cascades to
-  social rows (no orphans). Commenting requires a public handle.
+  (user_id, unique `handle`/`handle_lc` = **public DISPLAY NAME**, `bio`, `is_public`
+  [leaderboard opt-in], `bets_private` [hide all my bets]), `comments` (thread, body,
+  status, `ref_ticker`/`ref_title` = market context for the global feed), `reactions`
+  (unique per user/target/kind), `reports`; plus `bets.hidden` (per-bet visibility;
+  default 0 = public). **PRIVACY MODEL: bets are PUBLIC BY DEFAULT.** A bet shows in
+  the feed unless it's individually hidden (`bets.hidden=1`, the per-bet Public/Hidden
+  toggle in Your Activity) OR the user set `bets_private`. Anonymous (no account / no
+  display name) bets DO show, rendered as **"anonymous"**. Privacy rule for identity:
+  **only the display name / bio are ever exposed** — never username(login)/user_id.
+  - **username (login) is PRIVATE, display name is PUBLIC.** Sign-up now collects a
+    display name (stored as profile.handle, unique, 2-30 chars incl spaces; validated
+    by `_DISPLAY_RE`). `verify_login`/`/api/auth/me` return the handle so the UI shows it.
+  - `server.py` endpoints: `GET/POST /api/me/profile` (handle/bio/is_public/bets_private),
+    `GET /api/u/{handle}` (public profile), `GET /api/leaderboard` (30s cache; ranks
+    `is_public` profiles by ROI/Brier/win-rate), `GET /api/feed` (ALL public bets, incl
+    anonymous), `GET /api/comments?thread=` + `GET /api/comments/all` (**site-wide feed
+    of every comment** w/ market link), `POST /api/comments` (+`/{id}/delete`,
+    `/{id}/report`), `POST /api/reactions`, `POST /api/bets/{id}/public` (toggle hidden).
+  - Moderation: per-user/admin delete, reports, tiny slur blocklist, all rate-limited;
+    `ADMIN_HANDLES` env lists moderators. `delete_user` cascades to social rows.
+  - Frontend `social.js`/`social.css`: **Community** page = three tabs **Leaderboard /
+    All bets / All comments** (the last two are the global activity views so users
+    don't hunt for them). Public profile view (`NRB.views.user`). A reusable comments
+    thread mounted in the market-detail **left column** under the chart (thread =
+    `mkt:<event_ticker>`, passes ticker/title for the global feed). Like buttons.
+  - **Profile/privacy editing lives in Account settings** (auth modal → "Profile &
+    privacy" panel: display name, bio, leaderboard, bets-private). The Community page
+    only shows a one-line "Set display name" prompt if you have none yet — no editor box
+    once it's set. Commenting requires a display name.
 - **DESIGN OVERHAUL pass 1 (2026-06-26):** refined dark tokens (deeper neutrals, one
   emerald accent `--accent`, `--accent-ink`/`--accent-soft`/`--ring`, layered
   shadows), tighter heading typography, polished chrome (translucent top/section bars
@@ -100,7 +115,22 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   mark in top bar/drawer/onboarding/auth modal, line icons for every drawer item.
   `NRB.fmt.title()` strips leading emoji from dynamic Kalshi section titles so
   carousel headers/chips read clean. NOTE: this was pass 1 (chrome + tokens + icons);
-  per-view polish (detail/portfolio/profile/analytics density) is a good next pass.
+  per-view polish (portfolio/profile/analytics density) is a good next pass.
+- **UX additions (2026-06-26, all live):**
+  - **Top-level nav tabs** "Markets" / "Community" in the top bar (`.topnav` in
+    index.html, `updateTopnav()` in util.js) — Community is no longer only in the burger.
+  - **Header account button** (`#hdr-account`): shows "Create account / Sign in" when
+    logged out (opens the Sign-in screen by default), or the user's **display name** +
+    initials avatar when logged in (opens the account panel).
+  - **Clickable "?" help system**: `NRB.glossary` + `NRB.help(key)` render a small "?"
+    dot beside jargon labels; clicking shows a plain-language popover (closes on
+    outside-click/scroll). Wired into header (Cash/Equity), portfolio summary + table
+    headers, leaderboard + public-profile stats, and the Forecasting Score metrics.
+  - Portfolio: removed the **"Qty" (contracts) column** (meaningless in a $-framed app).
+  - Detail page **"Your bets on this market"** rewritten as clean labeled cards
+    (`.dpos`): status tag (Open/Won/Lost/Sold) + dollar stats (Bet / Entry odds / Now
+    worth / Profit-loss), each with a help dot. Lives in the right column; the
+    **discussion** now sits in the LEFT column under the chart (two-column layout).
 - `fills.py` — order-book-walk fill simulation + Kalshi fee (0.07*C*P*(1-P)).
 - `analytics.py` — Brier score, log-loss, calibration buckets, per-category skill
   (`by_category`), recent W/L streak, and **predict-then-bet** you-vs-market stats
@@ -126,14 +156,21 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   the no-3rd-party rule). Login is case-insensitive. Functions: login_taken,
   create_user (→ `(uid, code)`), verify_login, verify_recovery, set_password
   (clears sessions), get_user, delete_user, create_session, user_id_for_token,
-  delete_session, gen_recovery_code. `init()` runs `_migrate()` which idempotently
-  renames the old `email` column → `login` and adds the recovery columns (verified
-  against live Neon).
+  delete_session, gen_recovery_code. Sign-up ALSO collects a **display name** (public;
+  see Social layer). `init()` runs `_migrate()` which idempotently renames the old
+  `email` column → `login`, adds recovery/reset columns, and adds the social columns
+  (`bets.hidden`, `profiles.bets_private`, `comments.ref_ticker/ref_title`) — all
+  verified against live Neon.
 
 ### Frontend (vanilla JS, dark, mobile-first, PWA)
-- `index.html` — app shell: top bar (burger, brand, Cash/Equity), sticky section bar,
-  `#view`, burger drawer, onboarding overlay, connection banner, toast. Loads all
-  CSS/JS, manifest, registers the service worker.
+- `index.html` — app shell: top bar (burger, SVG brand mark, **Markets/Community nav
+  tabs**, Cash/Equity w/ help dots, **account button**), sticky section bar, `#view`,
+  burger drawer (SVG icons), onboarding, connection banner, toast, **multi-panel auth
+  modal** (login/signup/recovery/show-code/account/**profile&privacy**/change-pw/delete).
+  Loads all CSS/JS (incl `social.css`/`social.js`), manifest, registers the SW.
+- `social.js`/`social.css` — Community (leaderboard / all-bets / all-comments), public
+  profile view, reusable comments thread (mounted on detail's left column), like
+  buttons. See SOCIAL LAYER above.
 - `util.js` — the shared runtime `window.NRB` (STABLE CONTRACT). Provides: `api` (sends
   `X-User-Id`, shows connection banner on failure), `fmt`, `odds` (multiplier = 1/price),
   `icon(name, logo)` (real flag IMAGES via flagcdn since Windows can't render flag
@@ -141,9 +178,11 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   `carousel` (shared market-box component), `slip` (parlay bet-slip state), router
   (`views`, `go`, `openMarket`), `drawer`, theme toggle, predict-then-bet toggle,
   onboarding, `refreshAccount` (uses light `/api/summary`). **`auth`** (signup/login/
-  logout, stores session token in localStorage `nrb_token`, sends it as the
-  `X-Session-Token` header on every `api` call) + the **log-in/sign-up modal**
-  (`#auth-modal` in index.html, opened from burger → Account).
+  logout/recover/changePassword/deleteAccount; stores session token in localStorage
+  `nrb_token` + `nrb_login` [username] + `nrb_display` [public display name]; sends
+  `X-Session-Token` on every `api` call; `auth.sync()` refreshes from `/api/auth/me`).
+  Also: **`help`/`glossary`** (the "?" popovers), **`fmt.title`** (strip emoji),
+  `updateTopnav` (active nav tab). The auth modal + header account button are wired here.
 - `browse.js`/`browse.css` — Home "For You" feed of horizontal carousels + section bar
   + search + the **"My Bets" bar** + Watchlist view.
 - `detail.js`/`detail.css` — the market detail view (the biggest file). Multi-line
@@ -164,7 +203,8 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
 - `styles.css` — design tokens (dark default + light theme via `:root[data-theme=light]`),
   shell, shared atoms, market box, carousel, drawer, onboarding, banner, icons.
 - `sw.js` — service worker, **network-first** (always fresh online, cache fallback
-  offline). Cache name bumped on shell changes (currently `nrb-shell-v3`).
+  offline). **Bump `CACHE` (e.g. `nrb-shell-v16`) on every shell change** and add any
+  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v16`.)
 - `manifest.json`, `icon.svg` — PWA install metadata.
 
 ### API (all JSON; money in dollars; prices dollars 0–1; user via `X-User-Id` header)
@@ -185,8 +225,18 @@ accepts the permanent recovery code OR the emailed reset code) · **`POST /api/a
 **`POST /api/auth/logout`** · **`GET /api/auth/me`**. Signup/login accept a `login`
 field (username or email). The server's `_uid()` prefers a valid `X-Session-Token`
 (logged-in account) and falls back to the anonymous `X-User-Id`. Frontend: a
-multi-panel auth modal (login/signup/recovery/show-code/account/change-pw/delete)
-in index.html + `NRB.auth` in util.js; burger → Account opens it.
+multi-panel auth modal (login/signup/recovery/show-code/account/profile&privacy/
+change-pw/delete) in index.html + `NRB.auth` in util.js; the header account button
+or burger → Account opens it. Signup also takes a `display` (display name).
+
+**Social API:** `GET/POST /api/me/profile` · `GET /api/u/{handle}` ·
+`GET /api/leaderboard` · `GET /api/feed` · `GET /api/comments?thread=` ·
+`GET /api/comments/all` · `POST /api/comments` (+ `/{id}/delete`, `/{id}/report`) ·
+`POST /api/reactions` · `POST /api/bets/{id}/public`.
+
+**Env vars (set in Render):** `DATABASE_URL` (Neon Postgres), `BREVO_API_KEY` +
+`BREVO_SENDER` (email reset), optional `ADMIN_HANDLES` (comma list of moderator
+display names). Locally none are set → SQLite + no email.
 
 ## Key product decisions (already settled with the user)
 - Real Kalshi odds; demo apps that use sandbox/mock odds are useless — that's the whole
@@ -244,6 +294,24 @@ hardening, `/api/summary`, PWA.
     local runs since no `DATABASE_URL` locally → SQLite.
 - Neon password: was shared during setup but the user has **explicitly decided not to
   rotate it** (will delete the chat; not concerned). **Do NOT keep flagging this.**
+- ✅ **SHIPPED & LIVE this session (2026-06-26)** — all verified on the live site:
+  optional accounts (username/email + password, recovery code, **email reset via
+  Brevo**, change/delete), **separate private username vs public display name**,
+  **rate limiting** on auth, the full **social layer** (public-by-default bets,
+  bets-private setting, anonymous names, leaderboard, all-bets + all-comments global
+  feeds, per-market discussion in the detail left column, likes, moderation),
+  **design overhaul pass 1** (SVG icons replacing emoji, refined tokens, wordmark),
+  **top-nav Markets/Community tabs**, **header account button**, **"?" help glossary**,
+  and assorted cleanups (no Qty column, tidy "Your bets on this market" cards).
+  Working tree is clean; every change committed + pushed to `origin/main` (Render
+  auto-deploys). SW cache at `nrb-shell-v16`.
+
+### How accounts/social were tested (no JS engine locally)
+Backend verified two ways: (1) data-layer scripts against a temp SQLite db and against
+the **live Neon** DB (psycopg2-binary is pip-installed locally for this), (2) curl
+against a locally-run `python server.py` AND against the live Render URL. Frontend JS
+is verified by careful reading + a backtick-parity check (`grep -o '\`' file | wc -l`
+must be even) since there's no JS engine. **Always test new endpoints live after deploy.**
 
 ## ⚠️ The one real blocker to a PUBLIC launch (legal, not code)
 **Kalshi's Data Terms** restrict publicly displaying/redistributing their market data
@@ -253,13 +321,17 @@ license and review ESPN terms. Keep reminding him of this — it's the gating it
 any code.
 
 ## Backlog / ideas the user liked but hasn't built (NO AI/3rd-party tools allowed)
+- ✅ DONE: global leaderboard (ranked by accuracy/ROI) + public profiles + social feed.
 - Notification center + price alerts (make the 🔔 real).
 - "Live now" section (games currently in-play via ESPN state).
-- Global leaderboard with opt-in nickname (ranked by forecasting accuracy/ROI) + daily
-  forecast challenge / streaks / badges.
+- Daily forecast challenge / streaks / badges (the leaderboard exists to build on).
 - Edge / Kelly bet sizing (uses predict-then-bet edge).
 - Market resolution rules + related markets on detail; share score-card image; sounds.
+- Design overhaul **pass 2**: per-view density/layout polish (portfolio, profile,
+  analytics, detail) on top of the new tokens/icons.
 He often says "do all of the above" or "pick the next N and do them autonomously."
+He has told us: **when you recommend an option, just do it — don't ask** (see the
+project memory `just-do-it-no-asking`), and he **can't spend any money** (`budget-no-spend`).
 
 ## Gotchas / lessons
 - Restart the server after backend edits; it serves frontend files fresh from disk
