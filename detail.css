@@ -329,44 +329,35 @@
 
 /* ---- your positions on this market ---- */
 .detail-position:empty { display: none; }
-.detail-pos-card { padding: 14px 16px; margin-top: 16px; }
-.detail-pos-open { display: flex; flex-direction: column; gap: 8px; }
-.detail-pos-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) auto auto auto auto;
-  align-items: center; gap: 8px;
-  padding: 8px 10px; background: var(--bg-elev2); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); font-size: 12.5px;
-}
-.detail-pos-oc { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.detail-pos-oc .icoflag { font-size: 16px; width: 18px; }
-.detail-pos-oc .icoflag-img.logo,
-.detail-pos-oc .icobadge { width: 18px; height: 18px; }
-.detail-pos-nm {
-  font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
-}
-.detail-pos-meta { font-size: 11.5px; white-space: nowrap; }
-.detail-pos-now { font-size: 11.5px; white-space: nowrap; text-align: right; color: var(--muted); }
-.detail-pos-pnl { font-weight: 800; text-align: right; white-space: nowrap; }
-.detail-pos-sell {
-  padding: 5px 11px; font-size: 12px; border: 1px solid var(--border-strong);
-  color: var(--text); white-space: nowrap;
-}
-.detail-pos-sell:hover { border-color: var(--no); color: var(--no); background: var(--no-soft); }
-.detail-pos-sell:disabled { opacity: .6; cursor: default; }
-.detail-pos-hist {
-  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
-  display: flex; flex-direction: column; gap: 6px;
-}
-.detail-pos-hrow {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center;
-  gap: 8px; font-size: 12px;
-}
-.detail-pos-verdict { font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 11px; }
-.detail-pos-hrow .detail-pos-pnl { font-weight: 700; }
+.detail-pos-card { padding: 16px; margin-top: 16px; }
 
-/* responsive: when the trade panel is full-width on narrow screens, allow wrap */
-@media (max-width: 480px) {
-  .detail-pos-row { grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 4px; }
-  .detail-pos-meta { grid-column: 1 / -1; }
+/* one clean card per position */
+.dpos { background: var(--bg-elev2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 14px; margin-top: 10px; }
+.dpos-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.dpos-oc { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 700; font-size: 14.5px; }
+.dpos-oc .icoflag-img, .dpos-oc .icobadge { width: 20px; height: 20px; }
+.dpos-nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dpos-tag { font: 700 10.5px var(--font); text-transform: uppercase; letter-spacing: .04em;
+  padding: 3px 9px; border-radius: var(--radius-pill); flex-shrink: 0; }
+.dpos-tag.open { background: var(--accent-soft); color: var(--accent); }
+.dpos-tag.won { background: var(--yes-soft); color: var(--yes); }
+.dpos-tag.lost { background: var(--no-soft); color: var(--no); }
+.dpos-tag.sold { background: var(--bg-hover); color: var(--muted); }
+.dpos-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.dpos.done .dpos-stats { grid-template-columns: repeat(3, 1fr); }
+.dpos-stat { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.dpos-stat label { font-size: 10.5px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .03em; display: flex; align-items: center; }
+.dpos-val { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.dpos-sell { width: 100%; margin-top: 12px; padding: 9px; font-size: 13px;
+  border: 1px solid var(--border-strong); color: var(--text); }
+.dpos-sell:hover { border-color: var(--no); color: var(--no); background: var(--no-soft); }
+.dpos-sell:disabled { opacity: .6; cursor: default; }
+.dpos-sep { margin: 16px 0 2px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted); }
+
+@media (max-width: 420px) {
+  .dpos-stats { grid-template-columns: repeat(2, 1fr); row-gap: 12px; }
+  .dpos.done .dpos-stats { grid-template-columns: repeat(3, 1fr); }
 }

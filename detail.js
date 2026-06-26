@@ -1031,44 +1031,60 @@
     const open = bets.filter((b) => b.status === "open");
     const done = bets.filter((b) => b.status !== "open");
 
-    const openRow = (b) => {
+    const stat = (label, valueHtml, help, cls) =>
+      `<div class="dpos-stat">
+         <label>${label}${help ? NRB.help(help) : ""}</label>
+         <span class="dpos-val tnum ${cls || ""}">${valueHtml}</span>
+       </div>`;
+
+    const openCard = (b) => {
       const oc = betOutcome(b);
       const upnl = b.unrealized_pnl;
-      const pnlCls = upnl == null ? "" : (upnl >= 0 ? "pos" : "neg");
-      return `<div class="detail-pos-row">
-          <span class="detail-pos-oc">${NRB.icon(oc.name, oc.logo)}<span class="detail-pos-nm">${fmt.esc(oc.name)}</span></span>
-          <span class="detail-pos-meta muted tnum">${fmt.vol(b.contracts)} @ ${fmt.cents(b.avg_price)} · ${odds.multStr(b.avg_price)}</span>
-          <span class="detail-pos-now tnum">${b.current_price != null ? fmt.cents(b.current_price) : "—"} · ${fmt.usd(b.current_value)}</span>
-          <span class="detail-pos-pnl tnum ${pnlCls}">${fmt.signed(upnl)}</span>
-          <button class="btn btn-ghost detail-pos-sell" data-id="${fmt.esc(b.id)}">Sell</button>
+      const cls = upnl == null ? "" : (upnl >= 0 ? "pos" : "neg");
+      const entry = `${odds.multStr(b.avg_price)} <span class="muted">${odds.prob(b.avg_price)}</span>`;
+      return `<div class="dpos">
+          <div class="dpos-head">
+            <span class="dpos-oc">${NRB.icon(oc.name, oc.logo)}<span class="dpos-nm">${fmt.esc(oc.name)}</span></span>
+            <span class="dpos-tag open">Open</span>
+          </div>
+          <div class="dpos-stats">
+            ${stat("Bet", fmt.usd(b.cost_basis), "stake")}
+            ${stat("Entry odds", entry, "entry")}
+            ${stat("Now worth", fmt.usd(b.current_value), "value")}
+            ${stat("Profit / loss", fmt.signed(upnl), "unrealized_pnl", cls)}
+          </div>
+          <button class="btn dpos-sell" data-id="${fmt.esc(b.id)}">Sell position</button>
         </div>`;
     };
 
-    const doneRow = (b) => {
+    const doneCard = (b) => {
       const oc = betOutcome(b);
-      let verdict;
-      if (b.status === "closed") verdict = "Sold";
-      else {
-        const won = b.result === b.side || (b.result === "yes" && b.side === "yes") || (b.result === "no" && b.side === "no");
-        verdict = won ? "Won" : "Lost";
-      }
+      let verdict, vcls;
+      if (b.status === "closed") { verdict = "Sold"; vcls = "sold"; }
+      else { const won = b.result === b.side; verdict = won ? "Won" : "Lost"; vcls = won ? "won" : "lost"; }
       const pnl = b.realized_pnl;
-      const pnlCls = pnl == null ? "" : (pnl >= 0 ? "pos" : "neg");
-      return `<div class="detail-pos-hrow muted">
-          <span class="detail-pos-oc">${NRB.icon(oc.name, oc.logo)}<span class="detail-pos-nm">${fmt.esc(oc.name)}</span></span>
-          <span class="detail-pos-verdict">${verdict}</span>
-          <span class="detail-pos-pnl tnum ${pnlCls}">${fmt.signed(pnl)}</span>
+      const cls = pnl == null ? "" : (pnl >= 0 ? "pos" : "neg");
+      return `<div class="dpos done">
+          <div class="dpos-head">
+            <span class="dpos-oc">${NRB.icon(oc.name, oc.logo)}<span class="dpos-nm">${fmt.esc(oc.name)}</span></span>
+            <span class="dpos-tag ${vcls}">${verdict}</span>
+          </div>
+          <div class="dpos-stats">
+            ${stat("Bet", fmt.usd(b.cost_basis), "stake")}
+            ${stat("Payout", fmt.usd(b.payout), "payout")}
+            ${stat("Profit / loss", fmt.signed(pnl), "realized_pnl", cls)}
+          </div>
         </div>`;
     };
 
     host.innerHTML = `
       <div class="card detail-pos-card">
         <div class="detail-card-title">Your bets on this market</div>
-        ${open.length ? `<div class="detail-pos-open">${open.map(openRow).join("")}</div>` : ""}
-        ${done.length ? `<div class="detail-pos-hist">${done.map(doneRow).join("")}</div>` : ""}
+        ${open.map(openCard).join("")}
+        ${done.length ? `<div class="dpos-sep">Settled &amp; sold</div>${done.map(doneCard).join("")}` : ""}
       </div>`;
 
-    host.querySelectorAll(".detail-pos-sell").forEach((b) => {
+    host.querySelectorAll(".dpos-sell").forEach((b) => {
       b.addEventListener("click", () => sellBet(b.dataset.id, b));
     });
   }
