@@ -68,7 +68,10 @@
       S.outcomes = sibs.map((s) => ({
         name: s.yes_sub_title || s.title || s.ticker,
         ticker: s.ticker,
+        // price = real ask (for the wager→contracts trade math); chance = implied
+        // probability (for display + sorting), robust to the $1.00-ask placeholder
         price: (s.yes_ask != null) ? s.yes_ask : s.last_price,
+        chance: NRB.odds.chance(s),
         logo: s.logo || null,
       }));
     } else {
@@ -80,7 +83,7 @@
 
   // outcome objects sorted by current chance desc
   function outcomesByChance() {
-    return S.outcomes.slice().sort((a, b) => (b.price || 0) - (a.price || 0));
+    return S.outcomes.slice().sort((a, b) => (b.chance || 0) - (a.chance || 0));
   }
 
   // tickers that belong to THIS market/event (market + siblings)
@@ -116,12 +119,11 @@
 
   // ---- price helpers -------------------------------------------------------
   // YES "spot" probability used for the big number
+  // Implied "chance" for display (header %, change baseline). Uses the shared
+  // robust estimator so illiquid long-shots don't read as 100%.
   function yesSpot(m) {
     if (!m) return null;
-    if (m.yes_ask != null && m.yes_bid != null) return (m.yes_ask + m.yes_bid) / 2;
-    if (m.yes_ask != null) return m.yes_ask;
-    if (m.last_price != null) return m.last_price;
-    return null;
+    return NRB.odds.chance(m);
   }
 
   // event ticker (preferred for fav + history)
@@ -619,10 +621,10 @@
     if (S.multi) {
       if (!S.series.length) { host.innerHTML = ""; return; }
       // current chance comes from the live outcomes list (kept fresh by poll)
-      const priceByTicker = {};
-      S.outcomes.forEach((o) => { priceByTicker[o.ticker] = o.price; });
+      const chanceByTicker = {};
+      S.outcomes.forEach((o) => { chanceByTicker[o.ticker] = o.chance; });
       host.innerHTML = S.series.map((s) => {
-        const p = priceByTicker[s.ticker];
+        const p = chanceByTicker[s.ticker];
         const pct = (p == null) ? "—" : Math.round(p * 100);
         return itemColor(s.color, s.name, pct);
       }).join("");
@@ -669,20 +671,20 @@
     return (m.yes_ask != null) ? m.yes_ask : m.last_price;
   }
 
-  // build the list of {key, name, price, logo, selected} entries for the bet boxes
+  // build the list of {key, name, price, logo, selected} entries for the bet
+  // boxes. `price` here is the DISPLAY chance (implied probability), not the ask.
   function outcomeEntries() {
     if (S.multi) {
       return outcomesByChance().map((o) => ({
-        key: o.ticker, name: o.name, price: o.price, logo: o.logo || null,
+        key: o.ticker, name: o.name, price: o.chance, logo: o.logo || null,
         selected: o.ticker === S.ticker,
       }));
     }
     const m = S.market || {};
-    const yesPrice = (m.yes_ask != null) ? m.yes_ask : m.last_price;
-    const noPrice = (m.no_ask != null) ? m.no_ask : (m.last_price != null ? 1 - m.last_price : null);
+    const c = NRB.odds.chance(m);
     return [
-      { key: "yes", name: yesOutcomeName(), price: yesPrice, logo: null, selected: S.side === "yes" },
-      { key: "no", name: "No", price: noPrice, logo: null, selected: S.side === "no" },
+      { key: "yes", name: yesOutcomeName(), price: c, logo: null, selected: S.side === "yes" },
+      { key: "no", name: "No", price: 1 - c, logo: null, selected: S.side === "no" },
     ];
   }
 
@@ -850,7 +852,10 @@
 
     // expanded
     host.className = "detail-predict open";
-    const market = selectedPrice();             // 0–1 implied
+    // implied chance of the SELECTED side (robust; "No" = 1 - yes chance)
+    const yesChance = yesSpot(S.market);
+    const market = (!S.multi && S.side === "no" && yesChance != null)
+      ? (1 - yesChance) : yesChance;
     const marketPct = (market == null) ? null : Math.round(market * 100);
     const youPct = Math.round(fc.value);
     const showCompare = fc.locked || fc.revealed;
@@ -1254,8 +1259,11 @@
     const seq = ++S.histSeq;
 
     if (S.multi) {
-      // chart up to the TOP 6 outcomes by current chance, one history each
-      const top = outcomesByChance().slice(0, 6);
+      // chart only the TOP 3 outcomes by current chance, one history each, plus
+      // the selected outcome (so your pick stays visible even if it's a long-shot)
+      const top = outcomesByChance().slice(0, 3);
+      const sel = selectedOutcome();
+      if (sel && !top.some((o) => o.ticker === sel.ticker)) top.push(sel);
       const colorFor = (i) => LINE_COLORS[i % LINE_COLORS.length];
       let results;
       try {

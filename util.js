@@ -90,6 +90,21 @@
     mult: (p) => (p && p > 0 ? 1 / p : null),
     multStr: (p) => (p && p > 0 ? (1 / p).toFixed(2) + "x" : "—"),
     prob: (p) => (p == null ? "—" : Math.round(p * 100) + "%"),
+    // Implied probability (0–1) for DISPLAY. Robust to illiquid outcomes whose
+    // only "ask" is the $1.00 max placeholder (which would otherwise read 100%).
+    // Prefers the current bid/ask mid, then a real bid, then last trade, then a
+    // real (sub-$1) ask; returns 0 when there's no real market.
+    chance: (m) => {
+      if (!m) return 0;
+      const last = m.last_price, bid = m.yes_bid, ask = m.yes_ask;
+      const goodBid = bid != null && bid > 0 && bid < 1;
+      const goodAsk = ask != null && ask > 0 && ask < 1;
+      if (goodBid && goodAsk) return (bid + ask) / 2;
+      if (goodBid) return bid;
+      if (last != null && last > 0 && last < 1) return last;
+      if (goodAsk) return ask;
+      return 0;
+    },
   };
 
   // ---- icons: flag emoji + monogram badge ----------------------------------
@@ -251,16 +266,19 @@
   // ---- shared components: market box + carousel ----------------------------
   function optionsFor(event) {
     const ms = (event.markets || []).filter(Boolean);
+    // price here = implied chance (for the box's % + payout display), robust to
+    // illiquid "ask = $1.00" outcomes that would otherwise read 100% / 1.00x.
     if (ms.length === 1) {
       const m = ms[0];
+      const c = NRB.odds.chance(m);
       return [
-        { name: "Yes", price: m.yes_ask || m.last_price, ticker: m.ticker, side: "yes" },
-        { name: "No", price: m.no_ask, ticker: m.ticker, side: "no" },
+        { name: "Yes", price: c, ticker: m.ticker, side: "yes" },
+        { name: "No", price: 1 - c, ticker: m.ticker, side: "no" },
       ];
     }
     return [...ms]
-      .sort((a, b) => (b.yes_ask || 0) - (a.yes_ask || 0))
-      .map((m) => ({ name: m.yes_sub_title || m.title, price: m.yes_ask || m.last_price,
+      .sort((a, b) => NRB.odds.chance(b) - NRB.odds.chance(a))
+      .map((m) => ({ name: m.yes_sub_title || m.title, price: NRB.odds.chance(m),
                      ticker: m.ticker, side: "yes", logo: m.logo }));
   }
 

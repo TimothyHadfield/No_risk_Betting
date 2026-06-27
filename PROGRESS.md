@@ -220,6 +220,12 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   buttons. See SOCIAL LAYER above.
 - `util.js` — the shared runtime `window.NRB` (STABLE CONTRACT). Provides: `api` (sends
   `X-User-Id`, shows connection banner on failure), `fmt`, `odds` (multiplier = 1/price),
+  **`odds.chance(m)` (added 2026-06-27)** — robust implied probability (0–1) for DISPLAY:
+  prefers the bid/ask mid, then a real bid, then last trade, then a sub-$1 ask, else 0. Fixes
+  illiquid long-shots whose only "ask" is the $1.00 max placeholder (used to render 100% /
+  1.00x; now 0%/— or e.g. 1%/100x). Used for ALL displayed %/odds + outcome sorting;
+  the actual buy math (`selectedPrice`/wager→contracts) still uses the real ask. (Also:
+  detail chart now plots only the **top 3 outcomes by chance** + your selected one.)
   `icon(name, logo)` (real flag IMAGES via flagcdn since Windows can't render flag
   emoji; team logos; monogram fallback), `fav` + **`favCat`** + **`hiddenCat`** + `history`
   (localStorage), `box` + `carousel` (shared market-box component), `slip` (parlay bet-slip),
@@ -296,7 +302,7 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   shell, shared atoms, market box, carousel, drawer, onboarding, banner, icons.
 - `sw.js` — service worker, **network-first** (always fresh online, cache fallback
   offline). **Bump `CACHE` (e.g. `nrb-shell-v16`) on every shell change** and add any
-  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v23`.)
+  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v24`.)
 - `manifest.json`, `icon.svg` — PWA install metadata.
 
 ### API (all JSON; money in dollars; prices dollars 0–1; user via `X-User-Id` header)
