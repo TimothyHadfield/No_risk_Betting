@@ -442,6 +442,9 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); box-sh
 .drawer-label { font: 700 10px var(--font); text-transform: uppercase; letter-spacing: .08em;
   color: var(--faint); padding: 8px 22px 4px; margin-top: 10px; border-top: 1px solid var(--border);
   padding-top: 14px; }
+/* "Our Purpose" — a filled red heart that stays red (even on hover) */
+.drawer-item-purpose .ic { color: var(--no); }
+.drawer-item-purpose .ico-svg { fill: var(--no); stroke: var(--no); }
 /* destructive action reads red on hover */
 .drawer-item-danger:hover { background: var(--no-soft); color: var(--no); }
 .drawer-item-danger:hover .ic { color: var(--no); }
