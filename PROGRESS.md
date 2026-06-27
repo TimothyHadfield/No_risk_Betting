@@ -61,6 +61,20 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   retry/backoff. Holds the in-memory **events cache** (refreshed every 90s) and a
   `FEATURED_SERIES` list (World Cup + major leagues) merged in because the default feed
   buries them. Attaches a `logo` to each sports market via espn.logo_for.
+  - **SPORTS FUTURES/AWARDS (added 2026-06-27):** `FEATURED_FUTURES` — a curated, tight
+    allowlist of marquee non-game markets (WC Winner `KXMENWORLDCUP`, Golden Boot
+    `KXWCGOALLEADER`, WC awards `KXWCAWARD`, Ballon d'Or `KXBALLONDOR`, NBA/WNBA/NFL
+    titles & MVPs, etc.) each tagged with a custom `group` that `_normalize_events(...,
+    category_override=group)` writes as the event's `category`, so each group becomes its
+    own browsable/favoritable home section (key `cat:<group>`). Deliberately EXCLUDES the
+    niche stuff (per-group/per-region qualifiers, "first song", host-nation trivia, 45
+    per-team goal totals) — Kalshi only offers qualifiers in those niche forms, so they're
+    omitted by design. ~24 futures events across 6 groups; ~18 extra API calls/refresh.
+  - **GAME TIMING (added 2026-06-27):** `normalize_market` parses Kalshi's
+    `occurrence_datetime` → `occurrence_ts` (epoch, the kickoff). `_normalize_events` adds
+    `start_ts` (kickoff) and `is_game` (series ends in `GAME`) per event. Powers the feed's
+    "live now" red highlight and the detail's scheduled-time display. (~5% of WC fixtures
+    have no kickoff set in Kalshi yet → they degrade gracefully.)
 - `mailer.py` — **stdlib-only email sender** (added 2026-06-26) for the optional
   **email-based password reset**. Two transports, no third-party SDK:
   - **Brevo HTTP API (LIVE in production)** — `urllib` HTTPS POST. Used because
@@ -217,8 +231,19 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   `X-Session-Token` on every `api` call; `auth.sync()` refreshes from `/api/auth/me`).
   Also: **`help`/`glossary`** (the "?" popovers), **`fmt.title`** (strip emoji),
   `updateTopnav` (active nav tab). The auth modal + header account button are wired here.
-- `browse.js`/`browse.css` — Home "For You" feed of horizontal carousels + section bar
-  + search + the **"My Bets" bar** + Watchlist view. **FAVORITE CATEGORIES (2026-06-26):**
+  **`NRB.isLiveGame(event)` (2026-06-27):** true when a sports game's kickoff (`start_ts`)
+  has passed but it's plausibly still on (per-sport `liveWindow`); `NRB.box` adds the
+  `.box-live` red highlight + pulsing `.box-livedot` when so. No ESPN call — pure
+  kickoff+window from the cached `occurrence_ts`.
+- `browse.js`/`browse.css` — Home feed of horizontal carousels + section bar + search +
+  the **"My Bets" bar** + Watchlist view. **TOP SECTION = FAVORITED MARKETS (2026-06-27):**
+  the old mixed "For You" is replaced by **"★ Your favorites"** — only the specific events
+  the user has starred (`buildFavorites`); rebuilt live on `NRB.fav.onChange`. Omitted when
+  empty. **"YOU MAY LIKE" (2026-06-27):** a row of suggested-category cards (`youMayLikeEl`)
+  shown under the favorites section. A `RELATED` map (league key / `cat:<group>` →
+  related keys) surfaces categories related to what you've favorited and aren't already
+  favorited/hidden; each card favorites the category (→ floats up as a section) or scrolls
+  to it. **FAVORITE CATEGORIES (2026-06-26):**
   every carousel header (leagues + categories, not "For You") has a ☆/★ star; starring a
   category floats it (and its section-bar chip) to the **top of the feed**, just under
   "For You". Stored client-side in localStorage (`nrb_fav_cats`) via **`NRB.favCat`** (mirrors
@@ -237,7 +262,10 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   price chart (one line per outcome, **all resampled onto a shared timeline** so hover
   dots align), time-range pills + a "Game" in-game range, live score/clock, two/N
   **outcome bet boxes** (never shows "No" for multi-outcome events), **$ wager** input
-  (not "contracts") with live "→ win $X" + two-step confirm, **predict-then-bet** slider
+  (not "contracts") with live "→ win $X" + two-step confirm. **SCHEDULED TIME (2026-06-27):**
+  when a game hasn't started, the score area shows "Scheduled · &lt;kickoff in the viewer's
+  local timezone&gt;" (e.g. "Sat, Jul 4, 7:00 PM MDT") from `S.market.occurrence_ts` via
+  `fmtKickoff` + `Intl` — works even when ESPN doesn't match. **predict-then-bet** slider
   (opt-in, blind-by-default), **"Your position" card** + **chart entry markers**,
   **"Add to slip"**, HTML tooltip (clamped, never clips), 5s live poll + 30s chart
   refresh.
@@ -268,7 +296,7 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   shell, shared atoms, market box, carousel, drawer, onboarding, banner, icons.
 - `sw.js` — service worker, **network-first** (always fresh online, cache fallback
   offline). **Bump `CACHE` (e.g. `nrb-shell-v16`) on every shell change** and add any
-  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v22`.)
+  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v23`.)
 - `manifest.json`, `icon.svg` — PWA install metadata.
 
 ### API (all JSON; money in dollars; prices dollars 0–1; user via `X-User-Id` header)

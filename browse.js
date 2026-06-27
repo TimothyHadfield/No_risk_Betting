@@ -15,20 +15,72 @@
     window.scrollTo({ top: y, behavior: "smooth" });
   }
 
-  // Build the "For You" event list from favorites + recently-viewed categories.
-  function buildForYou(allEvents) {
+  // The top "Your favorites" section = the specific markets the user has starred.
+  function buildFavorites(allEvents) {
     const byTicker = {};
     allEvents.forEach((e) => { byTicker[e.event_ticker] = e; });
-    const picked = [];
+    const out = [];
     const seen = new Set();
-    const add = (e) => { if (e && !seen.has(e.event_ticker)) { seen.add(e.event_ticker); picked.push(e); } };
-    NRB.fav.list().forEach((t) => add(byTicker[t]));            // 1) favorites
-    NRB.history.recent(20).forEach((t) => add(byTicker[t]));    // 2) recently viewed
-    const topCats = NRB.history.topCategories(4);               // 3) favorite categories
-    if (topCats.length) {
-      allEvents.forEach((e) => { if (picked.length < 16 && topCats.includes(e.category)) add(e); });
-    }
-    return picked.slice(0, 16);
+    NRB.fav.list().forEach((t) => {
+      const e = byTicker[t];
+      if (e && !seen.has(t)) { seen.add(t); out.push(e); }
+    });
+    return out;
+  }
+
+  // "You may like": favoriting a category surfaces related categories to add.
+  // Keys are section keys: league tickers (e.g. KXWCGAME) and "cat:<group>".
+  const RELATED = {
+    "KXWCGAME": ["cat:World Cup Teams", "cat:World Cup Players", "cat:Ballon d'Or"],
+    "cat:World Cup Teams": ["cat:World Cup Players", "cat:Ballon d'Or", "KXWCGAME"],
+    "cat:World Cup Players": ["cat:World Cup Teams", "cat:Ballon d'Or", "KXWCGAME"],
+    "cat:Ballon d'Or": ["cat:World Cup Players", "cat:World Cup Teams"],
+    "KXNBAGAME": ["cat:NBA Futures", "cat:WNBA Title"],
+    "cat:NBA Futures": ["cat:WNBA Title", "KXNBAGAME"],
+    "KXWNBAGAME": ["cat:WNBA Title", "cat:NBA Futures"],
+    "cat:WNBA Title": ["KXWNBAGAME", "cat:NBA Futures"],
+    "KXNFLGAME": ["cat:NFL Futures"],
+    "cat:NFL Futures": ["KXNFLGAME"],
+  };
+
+  // Sections to suggest: related to something favorited, present in the feed,
+  // and not already favorited or hidden.
+  function buildSuggestions(rows) {
+    const favSet = new Set(NRB.favCat.list());
+    const hidSet = new Set(NRB.hiddenCat.list());
+    const byKey = {};
+    rows.forEach((r) => { byKey[r.key] = r; });
+    const keys = [];
+    const seen = new Set();
+    favSet.forEach((fk) => (RELATED[fk] || []).forEach((rk) => {
+      if (!seen.has(rk) && !favSet.has(rk) && !hidSet.has(rk) && byKey[rk]) {
+        seen.add(rk); keys.push(rk);
+      }
+    }));
+    return keys.map((k) => byKey[k]);
+  }
+
+  // A row of suggested-category cards (each favoritable / scroll-to).
+  function youMayLikeEl(sections) {
+    const wrap = NRB.el(
+      `<section class="yml"><div class="yml-head"><h3>You may like</h3></div><div class="yml-row"></div></section>`);
+    const row = wrap.querySelector(".yml-row");
+    sections.forEach((s) => {
+      const card = NRB.el(`<div class="yml-card"></div>`);
+      card.innerHTML =
+        `<div class="yml-name">${NRB.fmt.esc(NRB.fmt.title(s.title))}</div>
+         <div class="yml-meta muted">${(s.events || []).length} market${(s.events || []).length === 1 ? "" : "s"}</div>
+         <button class="yml-fav" type="button">★ Favorite</button>`;
+      card.querySelector(".yml-fav").addEventListener("click", (e) => {
+        e.stopPropagation();
+        NRB.favCat.toggle(s.key);   // onChange re-renders: it floats up + leaves this list
+      });
+      card.addEventListener("click", (e) => {
+        if (!e.target.closest(".yml-fav")) scrollToCarousel("sec-" + s.key);
+      });
+      row.appendChild(card);
+    });
+    return wrap;
   }
 
   const sectionBarEl = () => document.querySelector(".sectionbar");
@@ -36,13 +88,13 @@
     const el = sectionBarEl(); if (el) el.style.display = show ? "" : "none";
   }
 
-  // Float favorited categories to the top (just under "For You"), preserving the
-  // original relative order within each group.
+  // Float favorited categories to the top (just under "Your favorites"),
+  // preserving the original relative order within each group.
   function reorderRows(rows) {
     const favSet = new Set(NRB.favCat.list());
     const special = [], favd = [], rest = [];
     rows.forEach((r) => {
-      if (r.key === "foryou") special.push(r);
+      if (r.key === "favorites") special.push(r);
       else if (favSet.has(r.key)) favd.push(r);
       else rest.push(r);
     });
@@ -114,24 +166,21 @@
       const allEvents = [];
       sections.forEach((s) => (s.events || []).forEach((e) => allEvents.push(e)));
 
-      const forYou = buildForYou(allEvents);
-      const rows = [];
-      if (forYou.length) rows.push({ key: "foryou", title: "⭐ For You", events: forYou });
-      sections.forEach((s) => rows.push(s));
-
-      this._rows = rows;
+      this._sections = sections;
+      this._allEvents = allEvents;
       this._container = container;
       this._renderRows();
       this._wireCatAdd();
 
-      // re-render the feed live when a category is (un)favorited or (un)hidden
+      // re-render the feed live when a market or category is (un)favorited/hidden
       if (!this._catSubbed) {
         this._catSubbed = true;
-        const onCatChange = () => {
-          if (NRB.current.name === "browse" && this._rows) { this._renderRows(); refreshCatPanel(); }
+        const onChange = () => {
+          if (NRB.current.name === "browse" && this._sections) { this._renderRows(); refreshCatPanel(); }
         };
-        NRB.favCat.onChange(onCatChange);
-        NRB.hiddenCat.onChange(onCatChange);
+        NRB.favCat.onChange(onChange);
+        NRB.hiddenCat.onChange(onChange);
+        NRB.fav.onChange(onChange);
       }
     },
 
@@ -150,10 +199,16 @@
     // categories floated to the top. Re-runnable (used on favorite toggle).
     _renderRows() {
       const container = this._container;
-      if (!container) return;
-      // favorites float up; hidden categories drop out of the feed entirely
-      const rows = reorderRows(this._rows)
-        .filter((r) => r.key === "foryou" || !NRB.hiddenCat.has(r.key));
+      if (!container || !this._sections) return;
+      // Rebuild rows fresh: starred markets up top, then category sections.
+      const favs = buildFavorites(this._allEvents || []);
+      const baseRows = [];
+      if (favs.length) baseRows.push({ key: "favorites", title: "★ Your favorites", events: favs });
+      this._sections.forEach((s) => baseRows.push(s));
+      // favorited categories float up; hidden categories drop out entirely
+      const rows = reorderRows(baseRows)
+        .filter((r) => r.key === "favorites" || !NRB.hiddenCat.has(r.key));
+      const suggestions = buildSuggestions(rows);
 
       const secbar = $bar();
       if (secbar) {
@@ -171,9 +226,16 @@
 
       const feed = container.querySelector("#feed") || container;
       feed.innerHTML = "";
-      rows.forEach((r) => feed.appendChild(NRB.carousel(r.title, r.events, {
-        id: "sec-" + r.key, favKey: r.key === "foryou" ? null : r.key,
-      })));
+      const ymlEl = suggestions.length ? youMayLikeEl(suggestions) : null;
+      let ymlPlaced = false;
+      rows.forEach((r) => {
+        feed.appendChild(NRB.carousel(r.title, r.events, {
+          id: "sec-" + r.key, favKey: r.key === "favorites" ? null : r.key,
+        }));
+        // surface "You may like" right under the favorites section
+        if (ymlEl && !ymlPlaced && r.key === "favorites") { feed.appendChild(ymlEl); ymlPlaced = true; }
+      });
+      if (ymlEl && !ymlPlaced) feed.insertBefore(ymlEl, feed.firstChild);
 
       // scroll-spy: highlight the chip for the carousel nearest the top
       if (this._io) this._io.disconnect();

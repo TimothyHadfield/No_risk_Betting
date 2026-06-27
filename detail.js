@@ -1177,21 +1177,32 @@
     return clock ? `${score} · ${clock}` : score;
   }
 
+  // A scheduled kickoff formatted in the viewer's own timezone, e.g.
+  // "Sat, Jul 4, 7:00 PM MDT".
+  function fmtKickoff(ts) {
+    try {
+      return new Date(ts * 1000).toLocaleString(undefined, {
+        weekday: "short", month: "short", day: "numeric",
+        hour: "numeric", minute: "2-digit", timeZoneName: "short",
+      });
+    } catch (e) { return ""; }
+  }
+
   function renderScore() {
     const host = document.getElementById("d-score");
     if (!host) return;
     const g = S.game;
-    if (!g || !g.matched) { host.classList.add("hidden"); host.innerHTML = ""; return; }
-
-    const state = g.state;
-    const away = g.away || {}, home = g.home || {};
+    const now = Date.now() / 1000;
+    const occ = S.market && S.market.occurrence_ts;
+    const away = (g && g.away) || {}, home = (g && g.home) || {};
     // team logo image if provided, else fall back to flag/monogram
     const teamIcon = (t) => t.logo
       ? `<img class="icoflag-img logo" src="${fmt.esc(t.logo)}" alt="">`
       : NRB.icon(t.name || t.abbr || "");
 
-    if (state === "in" || state === "post") {
-      const live = state === "in";
+    // 1) live or finished game (ESPN matched) -> score line
+    if (g && g.matched && (g.state === "in" || g.state === "post")) {
+      const live = g.state === "in";
       const statusCls = live ? "detail-score-status live" : "detail-score-status muted";
       const dot = live ? `<span class="detail-live-dot"></span>` : "";
       host.innerHTML =
@@ -1213,7 +1224,16 @@
       return;
     }
 
-    if (state === "pre" && g.detail) {
+    // 2) scheduled game -> kickoff in the viewer's local time (from Kalshi)
+    if (occ && now < occ) {
+      host.innerHTML =
+        `<div class="detail-score-status muted detail-sched">Scheduled · ${fmt.esc(fmtKickoff(occ))}</div>`;
+      host.classList.remove("hidden");
+      return;
+    }
+
+    // 3) ESPN pre-game blurb fallback
+    if (g && g.matched && g.state === "pre" && g.detail) {
       host.innerHTML = `<div class="detail-score-status muted">${fmt.esc(g.detail)}</div>`;
       host.classList.remove("hidden");
       return;

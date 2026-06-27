@@ -112,6 +112,8 @@ def normalize_market(m):
         "open_interest": _f(m.get("open_interest_fp", m.get("open_interest"))),
         "liquidity": _f(m.get("liquidity_dollars", m.get("liquidity"))),
         "close_time": m.get("close_time"),
+        # scheduled start (kickoff) for game markets, epoch seconds or None
+        "occurrence_ts": espn._iso_ts(m.get("occurrence_datetime")),
         "can_close_early": m.get("can_close_early", False),
         "is_provisional": m.get("is_provisional", False),
         "mve": bool(m.get("mve_collection_ticker")),
@@ -307,10 +309,41 @@ FEATURED_SERIES = [
     {"series": "KXNCAAMBGAME", "kw": "college basketball ncaa march madness"},
 ]
 
+# Curated SPORTS FUTURES / AWARDS (not game outcomes): tournament winners, MVPs,
+# Golden Boot, qualifiers, etc. Each is tagged with a custom `group` that becomes
+# its own browsable, favoritable section (kept deliberately tight & marquee-only;
+# the trivia markets -- "first song", per-group qualifiers, host-nation stats --
+# are intentionally excluded). Each entry is one cheap /events call per refresh.
+FEATURED_FUTURES = [
+    # World Cup -- team outcomes (clean single-concept markets only; per-group /
+    # per-region qualifier markets are deliberately excluded as too niche)
+    {"series": "KXMENWORLDCUP", "group": "World Cup Teams", "kw": "world cup winner champion"},
+    {"series": "KXWC1STTIMEWIN", "group": "World Cup Teams", "kw": "world cup first time winner"},
+    {"series": "KXWCGAMEGOALS", "group": "World Cup Teams", "kw": "world cup highest scoring match"},
+    {"series": "KXWCNOEURSA", "group": "World Cup Teams", "kw": "world cup winning continent"},
+    {"series": "KXWCGSUNDEFEATED", "group": "World Cup Teams", "kw": "world cup win all group stage matches undefeated"},
+    # World Cup -- player awards
+    {"series": "KXWCGOALLEADER", "group": "World Cup Players", "kw": "world cup golden boot top scorer goal leader"},
+    {"series": "KXWCAWARD", "group": "World Cup Players", "kw": "world cup golden ball silver boot award"},
+    {"series": "KXWCGBOOTGOALS", "group": "World Cup Players", "kw": "world cup golden boot total goals"},
+    # Ballon d'Or (season-long soccer awards)
+    {"series": "KXBALLONDOR", "group": "Ballon d'Or", "kw": "ballon dor soccer player award"},
+    {"series": "KXSUPERBALLONDOR", "group": "Ballon d'Or", "kw": "super ballon dor"},
+    # NBA / WNBA
+    {"series": "KXNBAMVP", "group": "NBA Futures", "kw": "nba mvp most valuable player"},
+    {"series": "KXWNBA", "group": "WNBA Title", "kw": "wnba champion title"},
+    # NFL
+    {"series": "KXSB", "group": "NFL Futures", "kw": "super bowl champion nfl"},
+    {"series": "KXNFLMVP", "group": "NFL Futures", "kw": "nfl mvp most valuable player"},
+    {"series": "KXNFLAFCCHAMP", "group": "NFL Futures", "kw": "afc championship nfl"},
+    {"series": "KXNFLNFCCHAMP", "group": "NFL Futures", "kw": "nfc championship nfl"},
+]
 
-def _normalize_events(raw_events, kw=""):
+
+def _normalize_events(raw_events, kw="", category_override=None):
     """Turn raw Kalshi events (with nested markets) into our cache shape,
-    keeping only tradeable single markets. `kw` appends extra search keywords."""
+    keeping only tradeable single markets. `kw` appends extra search keywords.
+    `category_override` re-buckets futures events under a custom group name."""
     out = []
     for ev in raw_events:
         markets = [normalize_market(m) for m in (ev.get("markets") or [])]
@@ -322,10 +355,13 @@ def _normalize_events(raw_events, kw=""):
             m["logo"] = espn.logo_for(series_t, m["yes_sub_title"])
         markets.sort(key=lambda m: m["volume_24h"], reverse=True)
         title = ev.get("title") or ev.get("event_ticker")
-        category = ev.get("category") or "Other"
+        category = category_override or ev.get("category") or "Other"
         names = " ".join((m["title"] or "") + " " + (m["yes_sub_title"] or "")
                          for m in markets)
         search = " ".join([title, category, names, kw]).lower()
+        # scheduled-game timing: kickoff (epoch) + whether this is a live game
+        start_ts = next((m["occurrence_ts"] for m in markets if m.get("occurrence_ts")), None)
+        is_game = bool(series_t and series_t.endswith("GAME"))
         out.append({
             "event_ticker": ev.get("event_ticker"),
             "series_ticker": ev.get("series_ticker"),
@@ -335,6 +371,8 @@ def _normalize_events(raw_events, kw=""):
             "mutually_exclusive": bool(ev.get("mutually_exclusive")),
             "volume_24h": sum(m["volume_24h"] for m in markets),
             "search": search,
+            "start_ts": start_ts,
+            "is_game": is_game,
             "markets": markets,
         })
     return out
@@ -374,6 +412,22 @@ def refresh_events_cache(max_pages=4):
                 events.append(e)
                 seen.add(e["event_ticker"])
         time.sleep(0.15)  # pace requests to stay under the rate limit
+
+    # Merge in curated FUTURES/AWARDS, each re-bucketed under its custom group.
+    for feat in FEATURED_FUTURES:
+        try:
+            page = _get("/events", {
+                "series_ticker": feat["series"], "status": "open",
+                "with_nested_markets": "true", "limit": 200,
+            })
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+            continue
+        for e in _normalize_events(page.get("events", []), kw=feat.get("kw", ""),
+                                   category_override=feat["group"]):
+            if e["event_ticker"] not in seen:
+                events.append(e)
+                seen.add(e["event_ticker"])
+        time.sleep(0.15)
 
     events.sort(key=lambda e: e["volume_24h"], reverse=True)
     meta = {}

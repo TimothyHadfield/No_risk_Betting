@@ -264,16 +264,35 @@
                      ticker: m.ticker, side: "yes", logo: m.logo }));
   }
 
+  // Rough end-of-game windows (seconds) so a started game shows as "live" only
+  // while it's plausibly still on. ESPN isn't called here -- kickoff + window.
+  function liveWindow(series) {
+    const s = series || "";
+    if (/NFL|NCAAF/.test(s)) return 3.7 * 3600;
+    if (/MLB/.test(s)) return 3.6 * 3600;
+    if (/NBA|WNBA|NCAAMB|NCAAW/.test(s)) return 2.9 * 3600;
+    if (/NHL/.test(s)) return 3.0 * 3600;
+    if (/ATP|WTA/.test(s)) return 3.5 * 3600;
+    return 2.5 * 3600; // soccer + default
+  }
+  // A scheduled sports game that is plausibly in progress right now.
+  NRB.isLiveGame = function (event) {
+    if (!event || !event.is_game || !event.start_ts) return false;
+    const now = Date.now() / 1000;
+    return now >= event.start_ts && now < event.start_ts + liveWindow(event.series_ticker);
+  };
+
   NRB.box = function (event) {
     const opts = optionsFor(event);
     const shown = opts.slice(0, 3);
     const more = opts.length - shown.length;
     const firstTicker = (event.markets && event.markets[0] && event.markets[0].ticker) || "";
     const favOn = NRB.fav.has(event.event_ticker);
-    const box = NRB.el(`<div class="box"></div>`);
+    const live = NRB.isLiveGame(event);
+    const box = NRB.el(`<div class="box${live ? " box-live" : ""}"></div>`);
     box.innerHTML =
       `<div class="box-top">
-         <div class="box-title">${esc(event.title)}</div>
+         <div class="box-title">${live ? `<span class="box-livedot" title="Live now"></span>` : ""}${esc(event.title)}</div>
          <button class="box-fav ${favOn ? "on" : ""}" aria-label="Favorite">${favOn ? "★" : "☆"}</button>
        </div>
        <div class="box-opts">
