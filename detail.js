@@ -449,6 +449,17 @@
   }
 
   // ---- chart ---------------------------------------------------------------
+  // Pick a clean y-axis top at/just above the highest plotted value, so the
+  // chart fills the height (a 30%-peak chart tops out at 30%, not 100%).
+  function niceChartTop(peak) {
+    if (!peak || peak <= 0) return 10;
+    if (peak >= 90) return 100;
+    for (const top of [5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 90, 100]) {
+      if (peak <= top) return top;
+    }
+    return 100;
+  }
+
   function buildChart() {
     const canvas = document.getElementById("d-chart");
     const emptyEl = document.getElementById("d-chart-empty");
@@ -562,6 +573,15 @@
       order: -1,
     });
 
+    // y-axis fills the space: bottom always 0%, top = clean ceiling at the peak
+    // of everything drawn (the outcome lines + any bet-entry markers).
+    let peak = 0;
+    datasets.forEach((ds) => (ds.data || []).forEach((pt) => {
+      const y = pt && pt.y;
+      if (typeof y === "number" && isFinite(y) && y > peak) peak = y;
+    }));
+    const yMax = niceChartTop(peak);
+
     S.chart = new Chart(ctx, {
       type: "line",
       data: { datasets },
@@ -582,11 +602,11 @@
             },
           },
           y: {
-            min: 0, max: 100,
+            min: 0, max: yMax,
             grid: { color: "#232b38", drawTicks: false },
             border: { display: false },
             ticks: {
-              color: "#8b95a6", stepSize: 25, font: { size: 11 },
+              color: "#8b95a6", maxTicksLimit: 5, font: { size: 11 },
               callback: (v) => v + "%", padding: 8,
             },
           },

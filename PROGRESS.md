@@ -302,7 +302,7 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   shell, shared atoms, market box, carousel, drawer, onboarding, banner, icons.
 - `sw.js` — service worker, **network-first** (always fresh online, cache fallback
   offline). **Bump `CACHE` (e.g. `nrb-shell-v16`) on every shell change** and add any
-  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v24`.)
+  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v25`.)
 - `manifest.json`, `icon.svg` — PWA install metadata.
 
 ### API (all JSON; money in dollars; prices dollars 0–1; user via `X-User-Id` header)
