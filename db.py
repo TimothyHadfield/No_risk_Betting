@@ -315,12 +315,41 @@ def init(db_path=DB_PATH):
             created_at   {num} NOT NULL
         );
 
+        -- price alerts: notify the user when a market's chance crosses a target
+        CREATE TABLE IF NOT EXISTS alerts (
+            id           {pk},
+            user_id      TEXT NOT NULL,
+            ticker       TEXT NOT NULL,
+            event_ticker TEXT,
+            title        TEXT,
+            outcome_name TEXT,
+            side         TEXT NOT NULL,
+            op           TEXT NOT NULL,            -- 'above' | 'below'
+            threshold    {num} NOT NULL,           -- probability 0..1
+            active       INTEGER NOT NULL DEFAULT 1,
+            created_at   {num} NOT NULL
+        );
+
+        -- in-app notifications (fired alerts, settled bets, …)
+        CREATE TABLE IF NOT EXISTS notifications (
+            id          {pk},
+            user_id     TEXT NOT NULL,
+            kind        TEXT NOT NULL,
+            title       TEXT NOT NULL,
+            body        TEXT,
+            ref_ticker  TEXT,
+            created_at  {num} NOT NULL,
+            read_at     {num}
+        );
+
         CREATE INDEX IF NOT EXISTS idx_bets_user ON bets(user_id, status);
         CREATE INDEX IF NOT EXISTS idx_parlays_user ON parlays(user_id, status);
         CREATE INDEX IF NOT EXISTS idx_equity_user ON equity_history(user_id);
         CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
         CREATE INDEX IF NOT EXISTS idx_comments_thread ON comments(thread, status);
         CREATE INDEX IF NOT EXISTS idx_reactions_target ON reactions(target_type, target_id);
+        CREATE INDEX IF NOT EXISTS idx_alerts_active ON alerts(active);
+        CREATE INDEX IF NOT EXISTS idx_notifs_user ON notifications(user_id, read_at);
     """
     with _lock:
         if USE_PG:
@@ -684,6 +713,8 @@ def delete_user(uid):
         _exec("DELETE FROM reactions WHERE user_id = ?", (uid,))
         _exec("DELETE FROM reports WHERE reporter_id = ?", (uid,))
         _exec("DELETE FROM profiles WHERE user_id = ?", (uid,))
+        _exec("DELETE FROM alerts WHERE user_id = ?", (uid,))
+        _exec("DELETE FROM notifications WHERE user_id = ?", (uid,))
         _exec("DELETE FROM seasons WHERE user_id = ?", (uid,))
         _exec("DELETE FROM accounts WHERE user_id = ?", (uid,))
         _exec("DELETE FROM users WHERE user_id = ?", (uid,))
@@ -1098,4 +1129,93 @@ def add_report(reporter_id, target_type, target_id, reason):
               "created_at) VALUES (?,?,?,?,?)",
               (reporter_id, target_type, str(target_id), (reason or "")[:500],
                time.time()))
+        _commit()
+
+
+# ---- price alerts --------------------------------------------------------
+
+@_with_retry
+def create_alert(uid, a):
+    with _lock:
+        return _insert(
+            "INSERT INTO alerts (user_id, ticker, event_ticker, title, outcome_name, "
+            "side, op, threshold, active, created_at) VALUES (?,?,?,?,?,?,?,?,1,?)",
+            (uid, a["ticker"], a.get("event_ticker"), a.get("title"),
+             a.get("outcome_name"), a["side"], a["op"], a["threshold"], time.time()))
+
+
+@_with_retry
+def list_alerts(uid, active_only=False):
+    with _lock:
+        sql = "SELECT * FROM alerts WHERE user_id = ?"
+        if active_only:
+            sql += " AND active = 1"
+        return _query(sql + " ORDER BY created_at DESC", (uid,))
+
+
+@_with_retry
+def active_alerts():
+    """All active alerts across users (for the poller)."""
+    with _lock:
+        return _query("SELECT * FROM alerts WHERE active = 1")
+
+
+@_with_retry
+def deactivate_alert(alert_id):
+    with _lock:
+        _exec("UPDATE alerts SET active = 0 WHERE id = ?", (alert_id,))
+        _commit()
+
+
+@_with_retry
+def delete_alert(uid, alert_id):
+    with _lock:
+        _exec("DELETE FROM alerts WHERE id = ? AND user_id = ?", (alert_id, uid))
+        _commit()
+
+
+# ---- notifications -------------------------------------------------------
+
+@_with_retry
+def create_notification(uid, kind, title, body=None, ref_ticker=None):
+    with _lock:
+        return _insert(
+            "INSERT INTO notifications (user_id, kind, title, body, ref_ticker, "
+            "created_at) VALUES (?,?,?,?,?,?)",
+            (uid, kind, title, body, ref_ticker, time.time()))
+
+
+@_with_retry
+def list_notifications(uid, limit=50):
+    with _lock:
+        return _query("SELECT * FROM notifications WHERE user_id = ? "
+                      "ORDER BY created_at DESC LIMIT ?", (uid, limit))
+
+
+@_with_retry
+def unread_count(uid):
+    with _lock:
+        row = _query_one("SELECT COUNT(*) AS n FROM notifications "
+                         "WHERE user_id = ? AND read_at IS NULL", (uid,))
+        return row["n"] if row else 0
+
+
+@_with_retry
+def mark_notifications_read(uid, ids=None):
+    with _lock:
+        if ids:
+            ph = ",".join("?" for _ in ids)
+            _exec(f"UPDATE notifications SET read_at = ? WHERE user_id = ? "
+                  f"AND read_at IS NULL AND id IN ({ph})",
+                  (time.time(), uid, *ids))
+        else:
+            _exec("UPDATE notifications SET read_at = ? WHERE user_id = ? "
+                  "AND read_at IS NULL", (time.time(), uid))
+        _commit()
+
+
+@_with_retry
+def delete_notification(uid, nid):
+    with _lock:
+        _exec("DELETE FROM notifications WHERE id = ? AND user_id = ?", (nid, uid))
         _commit()

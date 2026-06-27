@@ -251,13 +251,24 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   **`NRB.seasonPicker(host, onChange)`** (util.js) fetches `/api/seasons`, renders a
   `<select>` (Current / each previous period / Overall), and is hidden until there's been
   ≥1 reset. Both stats views pass the chosen value as `/api/analytics?season=`.
+- `notifs.js`/`notifs.css` — **Notifications + price alerts view (added 2026-06-27).**
+  Reached from the burger → Notifications. Lists fired notifications (unread highlight,
+  click to open the market, dismiss; "Mark all read") + a "Your price alerts" section to
+  manage/remove active alerts. Opening the page marks all read and clears the burger badge.
+  **Set an alert** from the market detail page: the trade card's "🔔 Set a price alert"
+  button (`#d-alert` in detail.js, `setAlert()`) prompts for a target % for the selected
+  outcome; the server derives the direction (above/below) from the current chance. A
+  background pass in `positions_poller` (`check_price_alerts()` in server.py) compares
+  active alerts to the **cached** events feed (no extra Kalshi calls), fires a notification,
+  and one-shots the alert. Unread count rides on `/api/summary` (`unread`) → red
+  `.burger-badge` dot, refreshed by `NRB.refreshAccount`/`NRB.refreshBadge`.
 - `slip.js`/`slip.css` — floating bet-slip button + panel for **parlays**.
 - `views.css` — portfolio + analytics styles.
 - `styles.css` — design tokens (dark default + light theme via `:root[data-theme=light]`),
   shell, shared atoms, market box, carousel, drawer, onboarding, banner, icons.
 - `sw.js` — service worker, **network-first** (always fresh online, cache fallback
   offline). **Bump `CACHE` (e.g. `nrb-shell-v16`) on every shell change** and add any
-  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v21`.)
+  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v22`.)
 - `manifest.json`, `icon.svg` — PWA install metadata.
 
 ### API (all JSON; money in dollars; prices dollars 0–1; user via `X-User-Id` header)
@@ -289,7 +300,16 @@ or burger → Account opens it. Signup also takes a `display` (display name).
 **Social API:** `GET/POST /api/me/profile` · `GET /api/u/{handle}` ·
 `GET /api/leaderboard` · `GET /api/feed` · `GET /api/comments?thread=` ·
 `GET /api/comments/all` · `POST /api/comments` (+ `/{id}/delete`, `/{id}/report`) ·
-`POST /api/reactions` · `POST /api/bets/{id}/public`. Feed/profile bet cards include
+`POST /api/reactions` · `POST /api/bets/{id}/public`.
+
+**Alerts/notifications API (2026-06-27):** `GET/POST /api/alerts` (create takes
+`{ticker, side, outcome_name, title, event_ticker, target}` where target is 0–1; server
+derives `op` above/below from the live chance) · `POST /api/alerts/{id}/delete` ·
+`GET /api/notifications` (`{notifications, unread}`) · `POST /api/notifications/read`
+(body `{}` = all, or `{ids:[...]}`) · `POST /api/notifications/{id}/delete`. `/api/summary`
+now also returns `unread`. Tables `alerts` + `notifications` in db.py.
+
+Feed/profile bet cards include
 `outcome_name` (the backed team/candidate). `POST /api/comments` also accepts a `game`
 field (short live-score label, ≤80 chars) stored as `comments.game_state` and returned by
 the comment list endpoints.
@@ -382,7 +402,8 @@ any code.
 
 ## Backlog / ideas the user liked but hasn't built (NO AI/3rd-party tools allowed)
 - ✅ DONE: global leaderboard (ranked by accuracy/ROI) + public profiles + social feed.
-- Notification center + price alerts (make the 🔔 real).
+- ✅ DONE (2026-06-27): Notification center + price alerts (the 🔔 is now real — see
+  notifs.js + alerts/notifications API above).
 - "Live now" section (games currently in-play via ESPN state).
 - Daily forecast challenge / streaks / badges (the leaderboard exists to build on).
 - Edge / Kelly bet sizing (uses predict-then-bet edge).

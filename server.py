@@ -197,6 +197,47 @@ def events_refresher():
         time.sleep(90)
 
 
+def _yes_prob(m):
+    """A representative YES probability (0..1) for a cached market."""
+    yb, ya = (m.get("yes_bid") or 0), (m.get("yes_ask") or 0)
+    if yb and ya:
+        return (yb + ya) / 2.0
+    return m.get("last_price") or ya or yb or 0.0
+
+
+def check_price_alerts():
+    """Fire a notification for any active alert whose market crossed its target.
+    Uses the cached events feed (no extra Kalshi calls), then one-shots the alert."""
+    alerts = db.active_alerts()
+    if not alerts:
+        return
+    idx = {}
+    events, _ = kalshi.get_cached_events()
+    for e in events:
+        for m in (e.get("markets") or []):
+            if m.get("ticker"):
+                idx[m["ticker"]] = m
+    for a in alerts:
+        m = idx.get(a["ticker"])
+        if not m:
+            continue
+        yp = _yes_prob(m)
+        prob = yp if a["side"] == "yes" else (1.0 - yp)
+        if prob <= 0:
+            continue
+        op, thr = a["op"], a["threshold"]
+        hit = (op == "above" and prob >= thr) or (op == "below" and prob <= thr)
+        if not hit:
+            continue
+        name = a.get("outcome_name") or a.get("title") or a["ticker"]
+        arrow = "rose to" if op == "above" else "fell to"
+        title = "%s %s %d%%" % (name, arrow, round(prob * 100))
+        body = "Your alert (chance %s %d%%) triggered." % (
+            "≥" if op == "above" else "≤", round(thr * 100))
+        db.create_notification(a["user_id"], "alert", title, body, a["ticker"])
+        db.deactivate_alert(a["id"])
+
+
 def positions_poller():
     # small initial delay so startup isn't contended
     time.sleep(8)
@@ -205,6 +246,7 @@ def positions_poller():
             for b in db.all_open_bets():
                 settle_if_resolved(b)
             settle_parlays_if_resolved()
+            check_price_alerts()
             for uid in db.all_user_ids():
                 db.record_equity(uid, current_equity(uid))
         except Exception as e:
@@ -322,6 +364,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_list_comments(q)
         if path == "/api/me/profile":
             return self.api_my_profile()
+        if path == "/api/alerts":
+            return self.api_list_alerts()
+        if path == "/api/notifications":
+            return self.api_list_notifications()
         if path.startswith("/api/u/"):
             return self.api_public_profile(urllib.parse.unquote(path[len("/api/u/"):]))
         return self._send_json({"error": "not found"}, 404)
@@ -365,6 +411,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_report(self._seg_id(path, "/api/comments/", "/report"), body)
         if path == "/api/reactions":
             return self.api_react(body)
+        if path == "/api/alerts":
+            return self.api_create_alert(body)
+        if path.startswith("/api/alerts/") and path.endswith("/delete"):
+            return self.api_delete_alert(self._seg_id(path, "/api/alerts/", "/delete"))
+        if path == "/api/notifications/read":
+            return self.api_mark_read(body)
+        if path.startswith("/api/notifications/") and path.endswith("/delete"):
+            return self.api_delete_notification(
+                self._seg_id(path, "/api/notifications/", "/delete"))
         if path.startswith("/api/bets/") and path.endswith("/public"):
             return self.api_share_bet(self._bet_id(path, "/public"), body)
         if path == "/api/parlays":
@@ -1177,6 +1232,68 @@ class Handler(BaseHTTPRequestHandler):
         on = db.toggle_reaction(uid, ttype, str(tid))
         self._send_json({"ok": True, "liked": on})
 
+    # ---- price alerts + notifications ----
+    def api_list_alerts(self):
+        uid = self._uid()
+        rows = db.list_alerts(uid)
+        out = [{"id": r["id"], "ticker": r["ticker"], "event_ticker": r.get("event_ticker"),
+                "title": r.get("title"), "outcome_name": r.get("outcome_name"),
+                "side": r["side"], "op": r["op"], "threshold": r["threshold"],
+                "active": bool(r["active"]), "created_at": r["created_at"]} for r in rows]
+        self._send_json({"alerts": out})
+
+    def api_create_alert(self, body):
+        uid = self._uid()
+        if self._throttled("alert", 30, 120):
+            return
+        ticker = (body.get("ticker") or "").strip()
+        side = (body.get("side") or "yes").strip().lower()
+        if not ticker or side not in ("yes", "no"):
+            return self._send_json({"error": "bad parameters"}, 400)
+        try:
+            target = float(body.get("target"))
+        except (TypeError, ValueError):
+            return self._send_json({"error": "Enter a target percentage."}, 400)
+        if not (0.0 < target < 1.0):
+            return self._send_json({"error": "Target must be between 1% and 99%."}, 400)
+        if len(db.list_alerts(uid, active_only=True)) >= 50:
+            return self._send_json({"error": "Too many active alerts (50 max)."}, 400)
+        # derive direction from the current market chance for this outcome
+        m = live_market(ticker)
+        op = "above"
+        if m:
+            yp = _yes_prob(m)
+            cur = yp if side == "yes" else (1.0 - yp)
+            op = "above" if target >= cur else "below"
+        aid = db.create_alert(uid, {
+            "ticker": ticker, "event_ticker": (body.get("event_ticker") or "").strip() or None,
+            "title": (body.get("title") or "").strip()[:160] or None,
+            "outcome_name": (body.get("outcome_name") or "").strip()[:120] or None,
+            "side": side, "op": op, "threshold": target})
+        self._send_json({"ok": True, "id": aid, "op": op})
+
+    def api_delete_alert(self, aid):
+        db.delete_alert(self._uid(), aid)
+        self._send_json({"ok": True})
+
+    def api_list_notifications(self):
+        uid = self._uid()
+        rows = db.list_notifications(uid)
+        out = [{"id": r["id"], "kind": r["kind"], "title": r["title"], "body": r.get("body"),
+                "ref_ticker": r.get("ref_ticker"), "created_at": r["created_at"],
+                "read": r.get("read_at") is not None} for r in rows]
+        self._send_json({"notifications": out, "unread": db.unread_count(uid)})
+
+    def api_mark_read(self, body):
+        uid = self._uid()
+        ids = body.get("ids")
+        db.mark_notifications_read(uid, ids if isinstance(ids, list) and ids else None)
+        self._send_json({"ok": True, "unread": db.unread_count(uid)})
+
+    def api_delete_notification(self, nid):
+        db.delete_notification(self._uid(), nid)
+        self._send_json({"ok": True})
+
     def api_reset(self, body):
         uid = self._uid()
         try:
@@ -1192,7 +1309,8 @@ class Handler(BaseHTTPRequestHandler):
         uid = self._uid()
         acct = db.get_account(uid)
         self._send_json({"balance": acct["balance"], "starting": acct["starting"],
-                         "equity": current_equity(uid)})
+                         "equity": current_equity(uid),
+                         "unread": db.unread_count(uid)})
 
     def _season_param(self, q):
         """Parse ?season= -> current-season int (default), a specific int, or

@@ -22,12 +22,13 @@
   <link rel="stylesheet" href="profile.css">
   <link rel="stylesheet" href="slip.css">
   <link rel="stylesheet" href="social.css">
+  <link rel="stylesheet" href="notifs.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-inner">
-      <button class="burger" id="burger" aria-label="Menu"><span></span><span></span><span></span></button>
+      <button class="burger" id="burger" aria-label="Menu"><span></span><span></span><span></span><span class="burger-badge" id="burger-badge" hidden></span></button>
       <div class="brand" id="brand">
         <span class="brand-mark" aria-hidden="true">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -208,6 +209,7 @@
   <script src="profile.js"></script>
   <script src="slip.js"></script>
   <script src="social.js"></script>
+  <script src="notifs.js"></script>
   <script>
     window.addEventListener('DOMContentLoaded', () => {
       NRB.refreshAccount();

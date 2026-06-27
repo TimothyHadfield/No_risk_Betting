@@ -437,6 +437,15 @@
   NRB.state = { account: null };
   const acctSubs = [];
   NRB.onAccount = (cb) => { acctSubs.push(cb); if (NRB.state.account) cb(NRB.state.account); };
+  // unread-notification dot on the burger menu icon
+  function setNavBadge(n) {
+    const b = document.getElementById("burger-badge");
+    if (!b) return;
+    n = Number(n) || 0;
+    b.hidden = n <= 0;
+    b.textContent = n > 9 ? "9+" : String(n);
+  }
+
   NRB.refreshAccount = async function () {
     try {
       const s = await NRB.api("/api/summary");      // light: balance + live equity
@@ -445,10 +454,13 @@
       if (bal) bal.textContent = NRB.fmt.usd(s.balance);
       const eqEl = document.getElementById("hdr-equity");
       if (eqEl) eqEl.textContent = NRB.fmt.usd(s.equity != null ? s.equity : s.balance);
+      setNavBadge(s.unread);
       acctSubs.forEach((cb) => { try { cb(NRB.state.account); } catch (e) {} });
     } catch (e) { /* connection banner already shown by NRB.api */ }
     return NRB.state.account;
   };
+  // let views nudge the unread badge after reading/creating notifications
+  NRB.refreshBadge = function () { return NRB.refreshAccount(); };
 
   // ---- auth (optional cross-device accounts) -------------------------------
   // Login id is a username OR email; recovery is via a one-time code (no email).
@@ -598,6 +610,7 @@
     if (action === "activity") return NRB.go("portfolio");
     if (action === "profile") return NRB.go("profile");
     if (action === "analytics") return NRB.go("analytics");
+    if (action === "notifications") return NRB.go("notifications");
     if (action === "reset") return resetFlow();
     NRB.toast(action.charAt(0).toUpperCase() + action.slice(1) + " — coming soon");
   }

@@ -99,10 +99,15 @@ a { color: inherit; text-decoration: none; }
 }
 .burger {
   background: none; border: none; cursor: pointer; padding: 8px; border-radius: 10px;
-  display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; position: relative;
 }
 .burger:hover { background: var(--bg-elev2); }
 .burger span { width: 20px; height: 2px; background: var(--text); border-radius: 2px; }
+/* unread-notification count, overlaid on the menu icon */
+.burger-badge {
+  position: absolute; top: 0; right: 0; min-width: 15px; height: 15px; padding: 0 3px;
+  width: auto; background: var(--down); color: #fff; border-radius: 8px;
+  font: 700 10px/15px var(--font); text-align: center; box-sizing: border-box; }
 .brand { display: flex; align-items: center; gap: 9px; cursor: pointer; }
 .brand-mark { color: var(--accent); font-size: 18px; display: inline-flex; align-items: center; }
 .brand-mark svg { display: block; }

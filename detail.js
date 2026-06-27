@@ -256,6 +256,7 @@
 
               <button class="btn btn-primary btn-block detail-place" id="d-place">Place paper bet</button>
               <button class="btn btn-ghost btn-block detail-add-slip" id="d-add-slip">+ Add to slip</button>
+              <button class="btn btn-ghost btn-block detail-alert" id="d-alert">🔔 Set a price alert</button>
               <div class="detail-disclaimer muted">
                 No real money. Fills walk the live order book incl. Kalshi's fee.
               </div>
@@ -1317,6 +1318,31 @@
     document.getElementById("d-place").addEventListener("click", onPlaceClick);
     const addSlipBtn = document.getElementById("d-add-slip");
     if (addSlipBtn) addSlipBtn.addEventListener("click", addToSlip);
+    const alertBtn = document.getElementById("d-alert");
+    if (alertBtn) alertBtn.addEventListener("click", setAlert);
+  }
+
+  // create a one-shot price alert for the selected outcome at a target chance
+  async function setAlert() {
+    const name = selectedName() || (S.market && S.market.title) || S.ticker;
+    const raw = prompt('Notify me when "' + name + '" reaches what chance? (1–99%)');
+    if (raw == null) return;
+    const pct = parseFloat(String(raw).replace("%", "").trim());
+    if (isNaN(pct) || pct <= 0 || pct >= 100) {
+      NRB.toast("Enter a percentage between 1 and 99."); return;
+    }
+    try {
+      const r = await NRB.api("/api/alerts", { method: "POST", body: {
+        ticker: S.ticker, side: S.side, outcome_name: name,
+        title: (S.market && S.market.title) || S.event_title || S.ticker,
+        event_ticker: eventTicker(), target: pct / 100,
+      } });
+      if (r && r.ok) {
+        const dir = r.op === "below" ? "falls to" : "rises to";
+        NRB.toast("Alert set — we'll notify you when " + name + " " + dir + " " + Math.round(pct) + "%.");
+        if (NRB.refreshBadge) NRB.refreshBadge();
+      } else NRB.toast((r && r.error) || "Couldn't set the alert.");
+    } catch (e) { NRB.toast("Couldn't set the alert."); }
   }
 
   // ============================================================ view module
