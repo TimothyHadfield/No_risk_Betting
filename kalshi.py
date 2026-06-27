@@ -112,6 +112,10 @@ def normalize_market(m):
         "open_interest": _f(m.get("open_interest_fp", m.get("open_interest"))),
         "liquidity": _f(m.get("liquidity_dollars", m.get("liquidity"))),
         "close_time": m.get("close_time"),
+        # threshold ladder fields (spread/total markets): the strike line (e.g.
+        # 2.5) and its comparison type ("greater"). None for plain Yes/No markets.
+        "floor_strike": m.get("floor_strike"),
+        "strike_type": m.get("strike_type"),
         # scheduled start (kickoff) for game markets, epoch seconds or None
         "occurrence_ts": espn._iso_ts(m.get("occurrence_datetime")),
         "can_close_early": m.get("can_close_early", False),
@@ -449,3 +453,120 @@ def refresh_events_cache(max_pages=4):
 def get_cached_events():
     with _cache_lock:
         return list(_cache["events"]), _cache["updated"]
+
+
+# --------------------------------------------------------------------------
+# Spread / Total betting lines (margin-of-victory & over/under ladders)
+# --------------------------------------------------------------------------
+# A game event (KX{LEAGUE}GAME-{suffix}) has sibling SPREAD and TOTAL events
+# under the same suffix (KX{LEAGUE}SPREAD-{suffix}, KX{LEAGUE}TOTAL-{suffix}).
+# Each is a ladder of independent Yes/No markets keyed by a `floor_strike` line
+# (1.5, 2.5, 3.5, ...) -- exactly the "slide to pick the number" UX. We expose
+# them in a tidy shape; betting reuses the normal market/quote/bet path.
+
+def fetch_event(event_ticker):
+    """Fetch a single event (with nested markets), or None on any failure."""
+    if not event_ticker:
+        return None
+    try:
+        data = _get("/events/" + urllib.parse.quote(event_ticker),
+                    {"with_nested_markets": "true"})
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return None
+    return data.get("event")
+
+
+def _line_market(m):
+    """Lean normalized shape for one ladder rung (a spread/total threshold)."""
+    nm = normalize_market(m)
+    return {
+        "ticker": nm["ticker"],
+        "line": nm.get("floor_strike"),
+        "yes_sub_title": nm["yes_sub_title"],
+        "yes_bid": nm["yes_bid"], "yes_ask": nm["yes_ask"],
+        "no_bid": nm["no_bid"], "no_ask": nm["no_ask"],
+        "last_price": nm["last_price"], "status": nm["status"],
+    }
+
+
+def _spread_team(yes_sub):
+    """Pull the team name out of a spread market's subtitle, e.g.
+    'Reg Time: Argentina wins by more than 2.5 goals' -> 'Argentina'."""
+    s = yes_sub or ""
+    if ":" in s:                       # drop a 'Reg Time:'-style qualifier
+        s = s.split(":", 1)[1].strip()
+    low = s.lower()
+    for kw in (" wins by", " win by", " to win by"):
+        i = low.find(kw)
+        if i >= 0:
+            return s[:i].strip()
+    return s.strip()
+
+
+def _normalize_spread(ev):
+    """Group a spread event's rungs by team (each team -> ascending lines)."""
+    groups, order = {}, []
+    for m in ev.get("markets", []) or []:
+        nm = _line_market(m)
+        if nm["line"] is None:
+            continue
+        team = _spread_team(nm["yes_sub_title"]) or "Team"
+        if team not in groups:
+            groups[team] = []
+            order.append(team)
+        groups[team].append(nm)
+    sides = []
+    for team in order:
+        rungs = sorted(groups[team], key=lambda x: x["line"])
+        if rungs:
+            sides.append({"team": team, "rungs": rungs})
+    if len(sides) < 1:
+        return None
+    return {"event_ticker": ev.get("event_ticker"),
+            "title": ev.get("title"), "sides": sides}
+
+
+def _normalize_total(ev):
+    """Flatten a total event into one ascending ladder of over/under lines."""
+    rungs = [r for r in (_line_market(m) for m in (ev.get("markets", []) or []))
+             if r["line"] is not None]
+    rungs.sort(key=lambda x: x["line"])
+    if not rungs:
+        return None
+    unit = ""
+    for r in rungs:
+        s = (r["yes_sub_title"] or "").lower()
+        for u in ("runs", "goals", "points", "maps", "sets", "games", "rounds"):
+            if u in s:
+                unit = u
+                break
+        if unit:
+            break
+    return {"event_ticker": ev.get("event_ticker"),
+            "title": ev.get("title"), "unit": unit, "rungs": rungs}
+
+
+def fetch_game_lines(game_event_ticker, series_ticker):
+    """For a GAME event, fetch its sibling SPREAD and TOTAL ladders.
+
+    Returns {"spread": {...}|None, "total": {...}|None}. Empty dict when the
+    event isn't a game series or has no derivative markets.
+    """
+    if not series_ticker or not series_ticker.endswith("GAME"):
+        return {}
+    if "-" not in (game_event_ticker or ""):
+        return {}
+    base = series_ticker[:-4]                       # strip trailing "GAME"
+    suffix = game_event_ticker.split("-", 1)[1]
+    out = {}
+    sev = fetch_event(base + "SPREAD-" + suffix)
+    if sev:
+        sp = _normalize_spread(sev)
+        if sp:
+            out["spread"] = sp
+    tev = fetch_event(base + "TOTAL-" + suffix)
+    if tev:
+        tt = _normalize_total(tev)
+        if tt:
+            out["total"] = tt
+    return out

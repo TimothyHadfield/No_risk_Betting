@@ -52,6 +52,9 @@
       fc: null,        // forecast widget state (see freshForecast); null until known
       bets: [],        // bets relevant to this market/event (from /api/bets)
       betsSeq: 0,      // guards out-of-order /api/bets responses
+      lines: null,     // {spread, total} ladders for game events (null = none)
+      linesSeq: 0,     // guards out-of-order /api/lines responses
+      lineState: null, // per-block slider selection {spread:{...}, total:{...}}
       viewLogged: false,
       destroyed: false,
     };
@@ -276,6 +279,9 @@
 
             <!-- stats / rules -->
             <div class="card detail-stats" id="d-stats"></div>
+
+            <!-- spread / total betting lines (game events only) -->
+            <div class="detail-lines" id="d-lines"></div>
           </div>
 
           <!-- trade panel -->
@@ -1259,6 +1265,301 @@
     }
   }
 
+  // ---- spread / total betting lines (slider) -------------------------------
+  // Game events expose sibling "margin of victory" (spread) and "over/under"
+  // (total) ladders. Each rung is a real Yes/No market, so betting reuses the
+  // normal quote/bet path; here we present them as a slide-the-number control.
+
+  // is the open market a sports GAME event? (only those have spread/total)
+  function isGameEvent() {
+    const et = eventTicker() || "";
+    const series = et.split("-")[0];
+    return /GAME$/.test(series);
+  }
+
+  // is a wager input inside the lines card currently focused (mid-typing)?
+  function linesInputFocused() {
+    const a = document.activeElement;
+    return !!(a && a.closest && a.closest("#d-lines") && a.tagName === "INPUT");
+  }
+
+  async function loadLines() {
+    if (!isGameEvent()) { S.lines = null; renderLines(); return; }
+    const et = eventTicker();
+    if (!et) return;
+    const seq = ++S.linesSeq;
+    let res;
+    try {
+      res = await NRB.api(`/api/lines?event=${encodeURIComponent(et)}`);
+    } catch (e) { return; }            // keep prior lines on error
+    if (S.destroyed || seq !== S.linesSeq) return;
+    const spread = (res && res.spread) || null;
+    const total = (res && res.total) || null;
+    if (!spread && !total) { S.lines = null; renderLines(); return; }
+    S.lines = { spread, total };
+    if (!S.lineState) S.lineState = {};
+    if (spread && !S.lineState.spread) {
+      S.lineState.spread = { team: 0, rung: 0, side: "yes", wager: S.wager, confirming: false };
+    }
+    if (total && !S.lineState.total) {
+      // default the total slider near the middle line (the typical market O/U)
+      S.lineState.total = { rung: Math.floor((total.rungs.length - 1) / 2),
+                            side: "over", wager: S.wager, confirming: false };
+    }
+    renderLines();
+  }
+
+  // resolve the selected {ticker, side, price, name, m} for a block
+  function lineSelection(kind) {
+    if (!S.lines || !S.lines[kind] || !S.lineState || !S.lineState[kind]) return null;
+    if (kind === "spread") {
+      const sp = S.lines.spread, st = S.lineState.spread;
+      st.team = Math.min(st.team, sp.sides.length - 1);
+      const side = sp.sides[st.team];
+      if (!side) return null;
+      st.rung = Math.min(st.rung, side.rungs.length - 1);
+      const m = side.rungs[st.rung];
+      if (!m) return null;
+      return { ticker: m.ticker, side: "yes", price: m.yes_ask, m,
+               name: `${side.team} by ${m.line}+` };
+    }
+    const tt = S.lines.total, st = S.lineState.total;
+    st.rung = Math.min(st.rung, tt.rungs.length - 1);
+    const m = tt.rungs[st.rung];
+    if (!m) return null;
+    const over = st.side !== "under";
+    return { ticker: m.ticker, side: over ? "yes" : "no",
+             price: over ? m.yes_ask : m.no_ask, m,
+             name: `${over ? "Over" : "Under"} ${m.line}${tt.unit ? " " + tt.unit : ""}` };
+  }
+
+  // a discrete slider across a ladder's lines + the highlighted scale
+  function sliderHtml(kind, rungs, idx) {
+    const scale = rungs.map((r, i) =>
+      `<span class="${i === idx ? "on" : ""}">${r.line}</span>`).join("");
+    return `
+      <div class="detail-line-slider">
+        <input type="range" class="detail-line-range" data-k="${kind}"
+               min="0" max="${Math.max(0, rungs.length - 1)}" step="1" value="${idx}">
+        <div class="detail-line-scale">${scale}</div>
+      </div>`;
+  }
+
+  // wager stepper + place (two-step confirm) + add-to-slip for one block
+  function tradeHtml(kind) {
+    const st = S.lineState[kind];
+    return `
+      <div class="detail-line-readout" id="d-line-read-${kind}"></div>
+      <div class="detail-line-trade">
+        <div class="detail-stepper detail-line-stepper">
+          <button type="button" class="detail-step" data-k="${kind}" data-step="-5">−</button>
+          <input type="number" class="tnum detail-line-wager" data-k="${kind}" min="1" step="1" value="${st.wager}">
+          <button type="button" class="detail-step" data-k="${kind}" data-step="5">+</button>
+        </div>
+        <button class="btn btn-primary detail-line-place" data-k="${kind}">Place paper bet</button>
+      </div>
+      <button class="btn btn-ghost btn-block detail-line-slip" data-k="${kind}">+ Add to slip</button>`;
+  }
+
+  function spreadBlockHtml() {
+    const sp = S.lines.spread, st = S.lineState.spread;
+    st.team = Math.min(st.team, sp.sides.length - 1);
+    const side = sp.sides[st.team];
+    st.rung = Math.min(st.rung, side.rungs.length - 1);
+    const tabs = sp.sides.map((s, i) =>
+      `<button class="detail-line-seg ${i === st.team ? "active" : ""}" data-k="spread" data-team="${i}">${fmt.esc(s.team)}</button>`).join("");
+    return `
+      <div class="detail-line-block" data-block="spread">
+        <div class="detail-line-h">Margin of victory <span class="muted">— who wins by how much</span></div>
+        <div class="detail-line-segs">${tabs}</div>
+        ${sliderHtml("spread", side.rungs, st.rung)}
+        ${tradeHtml("spread")}
+      </div>`;
+  }
+
+  function totalBlockHtml() {
+    const tt = S.lines.total, st = S.lineState.total;
+    st.rung = Math.min(st.rung, tt.rungs.length - 1);
+    const unit = tt.unit || "score";
+    return `
+      <div class="detail-line-block" data-block="total">
+        <div class="detail-line-h">Total ${fmt.esc(unit)} <span class="muted">— over / under</span></div>
+        <div class="detail-line-segs">
+          <button class="detail-line-seg ${st.side !== "under" ? "active" : ""}" data-k="total" data-ou="over">Over</button>
+          <button class="detail-line-seg ${st.side === "under" ? "active" : ""}" data-k="total" data-ou="under">Under</button>
+        </div>
+        ${sliderHtml("total", tt.rungs, st.rung)}
+        ${tradeHtml("total")}
+      </div>`;
+  }
+
+  function renderLines() {
+    const host = document.getElementById("d-lines");
+    if (!host) return;
+    if (!S.lines) { host.innerHTML = ""; return; }
+    // a live refresh while the user is typing a wager: update prices only, so we
+    // never steal focus or reset the input mid-keystroke
+    if (host.querySelector(".detail-lines-card") && linesInputFocused()) {
+      updateLineReadout("spread"); updateLineReadout("total"); return;
+    }
+    let html = `<div class="card detail-lines-card"><div class="detail-card-title">More ways to bet</div>`;
+    if (S.lines.spread) html += spreadBlockHtml();
+    if (S.lines.total) html += totalBlockHtml();
+    html += `</div>`;
+    host.innerHTML = html;
+    wireLines();
+    updateLineReadout("spread");
+    updateLineReadout("total");
+  }
+
+  // live pick label + multiplier + chance + "→ win $X" for a block
+  function updateLineReadout(kind) {
+    if (!S.lines || !S.lines[kind]) return;
+    const el = document.getElementById(`d-line-read-${kind}`);
+    if (!el) return;
+    const sel = lineSelection(kind);
+    if (!sel || sel.price == null || sel.price <= 0) {
+      el.innerHTML = `<div class="detail-line-pick">${sel ? fmt.esc(sel.name) : "—"}</div><span class="muted">No price for this line right now.</span>`;
+      return;
+    }
+    const baseChance = NRB.odds.chance(sel.m);
+    const chance = sel.side === "no"
+      ? (baseChance == null ? null : 1 - baseChance) : baseChance;
+    const st = S.lineState[kind];
+    const w = Math.max(0, Number(st.wager) || 0);
+    const mult = odds.mult(sel.price);
+    const win = (mult != null && w) ? fmt.usd(w * mult) : null;
+    el.innerHTML = `
+      <div class="detail-line-pick">${fmt.esc(sel.name)}</div>
+      <div class="detail-line-nums">
+        <span class="detail-line-mult tnum pos">${odds.multStr(sel.price)}</span>
+        <span class="muted tnum">${odds.prob(chance)} chance</span>
+        ${win != null ? `<span class="detail-line-win muted">→ win <b class="pos tnum">${win}</b></span>` : ""}
+      </div>`;
+  }
+
+  function resetLinePlace(kind) {
+    if (S.lineState && S.lineState[kind]) S.lineState[kind].confirming = false;
+    const host = document.getElementById("d-lines");
+    const b = host && host.querySelector(`.detail-line-place[data-k="${kind}"]`);
+    if (b) { b.classList.remove("detail-confirm"); b.textContent = "Place paper bet"; }
+  }
+
+  function wireLines() {
+    const host = document.getElementById("d-lines");
+    if (!host) return;
+
+    host.querySelectorAll(".detail-line-seg").forEach((b) => {
+      b.addEventListener("click", () => {
+        const k = b.dataset.k;
+        if (k === "spread") S.lineState.spread.team = parseInt(b.dataset.team, 10) || 0;
+        else S.lineState.total.side = b.dataset.ou;
+        renderLines();   // segment change is a click (not the wager field) -> safe rebuild
+      });
+    });
+
+    host.querySelectorAll(".detail-line-range").forEach((r) => {
+      r.addEventListener("input", () => {
+        const k = r.dataset.k;
+        S.lineState[k].rung = parseInt(r.value, 10) || 0;
+        // keep the drag smooth: update the scale highlight + readout in place
+        const block = r.closest(".detail-line-block");
+        if (block) {
+          block.querySelectorAll(".detail-line-scale span")
+            .forEach((s, i) => s.classList.toggle("on", i === S.lineState[k].rung));
+        }
+        resetLinePlace(k);
+        updateLineReadout(k);
+      });
+    });
+
+    host.querySelectorAll(".detail-line-stepper .detail-step").forEach((b) => {
+      b.addEventListener("click", () => {
+        const k = b.dataset.k, d = parseInt(b.dataset.step, 10);
+        const st = S.lineState[k];
+        st.wager = Math.max(1, (Math.floor(st.wager) || 0) + d);
+        const inp = host.querySelector(`.detail-line-wager[data-k="${k}"]`);
+        if (inp) inp.value = st.wager;
+        resetLinePlace(k);
+        updateLineReadout(k);
+      });
+    });
+
+    host.querySelectorAll(".detail-line-wager").forEach((inp) => {
+      inp.addEventListener("input", () => {
+        const k = inp.dataset.k;
+        const v = parseInt(inp.value, 10);
+        S.lineState[k].wager = isNaN(v) ? 0 : Math.max(0, v);
+        resetLinePlace(k);
+        updateLineReadout(k);
+      });
+    });
+
+    host.querySelectorAll(".detail-line-place").forEach((b) => {
+      b.addEventListener("click", () => onLinePlace(b.dataset.k, b));
+    });
+    host.querySelectorAll(".detail-line-slip").forEach((b) => {
+      b.addEventListener("click", () => addLineToSlip(b.dataset.k));
+    });
+  }
+
+  function onLinePlace(kind, btn) {
+    const st = S.lineState[kind];
+    const sel = lineSelection(kind);
+    if (!sel || sel.price == null || sel.price <= 0) { NRB.toast("No price for this line."); return; }
+    const w = Math.max(0, Number(st.wager) || 0);
+    const contracts = (w && sel.price > 0) ? Math.max(1, Math.round(w / sel.price)) : 0;
+    if (!w || !contracts) { NRB.toast("Enter a wager amount."); return; }
+    if (!st.confirming) {
+      st.confirming = true;
+      const mult = odds.mult(sel.price);
+      const win = mult != null ? ` → win ${fmt.usd(w * mult)}` : "";
+      btn.classList.add("detail-confirm");
+      btn.textContent = `Confirm: ${fmt.usd(w)} on ${sel.name}${win}`;
+      return;
+    }
+    placeLineBet(kind, btn, sel, w, contracts);
+  }
+
+  async function placeLineBet(kind, btn, sel, wager, contracts) {
+    S.lineState[kind].confirming = false;
+    btn.disabled = true; btn.classList.remove("detail-confirm"); btn.textContent = "Placing…";
+    try {
+      const res = await NRB.api("/api/bets", { method: "POST", body: {
+        ticker: sel.ticker, side: sel.side, contracts, outcome_name: sel.name,
+      } });
+      if (res && res.error) {
+        NRB.toast(res.error);
+      } else if (res && res.ok) {
+        const payout = (res.bet && res.bet.max_payout != null) ? res.bet.max_payout
+          : (res.quote && res.quote.max_payout != null) ? res.quote.max_payout : null;
+        const winTxt = payout != null ? ` to win ${fmt.usd(payout)}` : "";
+        NRB.toast(`Bet placed: ${fmt.usd(wager)} on ${sel.name}${winTxt}`);
+        await NRB.refreshAccount();
+        await loadBets();
+      } else {
+        NRB.toast("Bet failed.");
+      }
+    } catch (e) {
+      NRB.toast("Network error placing bet.");
+    } finally {
+      if (btn && !S.destroyed) { btn.disabled = false; btn.classList.remove("detail-confirm"); btn.textContent = "Place paper bet"; }
+    }
+  }
+
+  function addLineToSlip(kind) {
+    const sel = lineSelection(kind);
+    if (!sel) return;
+    if (!NRB.slip || !NRB.slip.add) return;
+    const m = S.market || {};
+    NRB.slip.add({
+      ticker: sel.ticker, side: sel.side, name: sel.name,
+      price: sel.price, logo: null,
+      eventTitle: (S.meta && S.meta.event_title) || m.title || "",
+    });
+    NRB.toast("Added to slip: " + sel.name);
+  }
+
   // ---- data fetching -------------------------------------------------------
   function logViewOnce() {
     if (S.viewLogged) return;
@@ -1440,10 +1741,12 @@
       loadGame();            // keep score line / clock live
       loadBets();            // keep "Your position" P&L + markers live
     }, POLL_MS);
-    // slower poll: stream new 1-min candles for whatever range is selected
+    // slower poll: stream new 1-min candles for whatever range is selected,
+    // and refresh spread/total line prices if this game has them
     S.histPollId = setInterval(() => {
       if (S.destroyed) return;
       loadHistory();         // redraws the two-line chart for the active range
+      if (S.lines) loadLines();   // keep slider prices fresh (cheap: 20s server cache)
     }, HIST_REFRESH_MS);
   }
   function stopPolling() {
@@ -1594,6 +1897,7 @@
       if (S.destroyed) return;
       runQuote();
       startPolling();
+      loadLines();           // spread / total slider bets (game events only)
 
       // community discussion for this market — in the LEFT column under the chart
       if (NRB.social && NRB.social.mountThread) {

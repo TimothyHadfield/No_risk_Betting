@@ -57,6 +57,11 @@ _rl_hits = {}  # key -> [timestamps within window]
 # Short cache for the (relatively expensive) leaderboard computation.
 _lb_lock = threading.Lock()
 _lb_cache = {"data": None, "at": 0.0}
+
+# Short cache for per-game spread/total lines (each lookup = 2 Kalshi calls).
+_lines_lock = threading.Lock()
+_lines_cache = {}  # event_ticker -> (payload, fetched_at)
+_LINES_TTL = 20.0
 _LB_TTL = 30.0
 
 # Minimal slur blocklist for comments -- a backstop, not a real filter. Real
@@ -336,6 +341,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_market(urllib.parse.unquote(path[len("/api/market/"):]))
         if path == "/api/history":
             return self.api_history(q)
+        if path == "/api/lines":
+            return self.api_lines(q)
         if path == "/api/game":
             return self.api_game(q)
         if path == "/api/quote":
@@ -586,6 +593,27 @@ class Handler(BaseHTTPRequestHandler):
                          "exclusive": bool(ev.get("mutually_exclusive")) if ev else True,
                          "event_title": ev["title"] if ev else None})
 
+    def api_lines(self, q):
+        """Spread (margin-of-victory) + Total (over/under) ladders for a game
+        event, so the detail page can offer the slider-style bets. Cheap 20s
+        cache: two Kalshi calls per game, shared across all viewers."""
+        event = (q.get("event", [""])[0] or "").strip()
+        empty = {"spread": None, "total": None}
+        if not event:
+            return self._send_json(empty)
+        now = time.time()
+        with _lines_lock:
+            hit = _lines_cache.get(event)
+            if hit and now - hit[1] < _LINES_TTL:
+                return self._send_json(hit[0])
+        ev = kalshi.find_cached_event(event)
+        series = (ev or {}).get("series_ticker") or event.split("-")[0]
+        data = kalshi.fetch_game_lines(event, series)
+        payload = {"spread": data.get("spread"), "total": data.get("total")}
+        with _lines_lock:
+            _lines_cache[event] = (payload, now)
+        self._send_json(payload)
+
     # range -> (period_interval_minutes, lookback_seconds)
     # (preferred candle interval in minutes, lookback seconds). Finer = more
     # points. Kalshi caps a request at 5000 candles, so: 1-min works up to
@@ -696,8 +724,13 @@ class Handler(BaseHTTPRequestHandler):
                  "needed": qd["cost_basis"], "balance": acct["balance"]}, 400)
 
         # the human-readable outcome the user actually backed (e.g. a team /
-        # candidate name for "yes", or "No" for the no side of a threshold market)
-        if side == "yes":
+        # candidate name for "yes", or "No" for the no side of a threshold market).
+        # The client may pass an explicit label (e.g. "Under 7.5 runs" for a
+        # total's No side, where the market subtitle would otherwise mislead).
+        custom = (body.get("outcome_name") or "").strip()
+        if custom:
+            outcome_name = custom[:120]
+        elif side == "yes":
             outcome_name = m.get("yes_sub_title") or m["title"]
         else:
             outcome_name = m.get("no_sub_title") or "No"

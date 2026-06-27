@@ -70,6 +70,18 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
     niche stuff (per-group/per-region qualifiers, "first song", host-nation trivia, 45
     per-team goal totals) — Kalshi only offers qualifiers in those niche forms, so they're
     omitted by design. ~24 futures events across 6 groups; ~18 extra API calls/refresh.
+  - **SPREAD / TOTAL LINES (added 2026-06-27):** game events expose sibling
+    "margin of victory" (spread) and "over/under" (total) ladders under the SAME
+    event suffix and a sibling series (`KX{LG}GAME-{suf}` → `KX{LG}SPREAD-{suf}` /
+    `KX{LG}TOTAL-{suf}`). Each rung is an independent Yes/No market keyed by a
+    `floor_strike` line (1.5, 2.5, 3.5…). `fetch_game_lines(game_event, series)`
+    fetches both sibling events (`fetch_event` = single-event GET) and returns a
+    tidy shape: spread = per-team ascending rungs (`_normalize_spread`, team parsed
+    from the subtitle via `_spread_team`); total = one ascending ladder + a `unit`
+    word (`_normalize_total`). `normalize_market` now also surfaces
+    `floor_strike`/`strike_type`. Betting reuses the normal quote/bet path (each
+    rung is a real market); only ~15% of games have these ladders (major/liquid
+    games), and non-GAME series return `{}`.
   - **GAME TIMING (added 2026-06-27):** `normalize_market` parses Kalshi's
     `occurrence_datetime` → `occurrence_ts` (epoch, the kickoff). `_normalize_events` adds
     `start_ts` (kickoff) and `is_game` (series ends in `GAME`) per event. Powers the feed's
@@ -287,7 +299,17 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   (not "contracts") with live "→ win $X" + two-step confirm. **SCHEDULED TIME (2026-06-27):**
   when a game hasn't started, the score area shows "Scheduled · &lt;kickoff in the viewer's
   local timezone&gt;" (e.g. "Sat, Jul 4, 7:00 PM MDT") from `S.market.occurrence_ts` via
-  `fmtKickoff` + `Intl` — works even when ESPN doesn't match. **predict-then-bet** slider
+  `fmtKickoff` + `Intl` — works even when ESPN doesn't match. **SPREAD / TOTAL
+  SLIDER (2026-06-27):** a "More ways to bet" card in the LEFT column (under the
+  chart) on game events. `loadLines()` fetches `/api/lines` (only when
+  `isGameEvent()`); if the game has ladders it renders a **Margin of victory** block
+  (team segment + a discrete `<input type=range>` slider across 1.5/2.5/3.5… with a
+  live odds readout — back the team to cover) and a **Total** block (Over/Under
+  segment + slider across the O/U lines). Each block has its own wager stepper +
+  two-step-confirm Place + Add-to-slip; selection lives in `S.lineState` (survives
+  the 30s price re-poll; a focus guard skips the rebuild while you're typing a
+  wager). Bets POST the line ticker with an explicit `outcome_name` (e.g.
+  "Under 5.5 runs", "A's by 2.5+") and show in Portfolio. **predict-then-bet** slider
   (opt-in, blind-by-default), **"Your position" card** + **chart entry markers**,
   **"Add to slip"**, HTML tooltip (clamped, never clips), 5s live poll + 30s chart
   refresh.
@@ -326,7 +348,9 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
 `/api/home` (sections: Trending, leagues, categories) · `/api/market/{ticker}`
 (returns market, orderbook, meta, **siblings** [all outcomes of a mutually-exclusive
 event], event_title) · `/api/history?ticker=&range=1H|6H|1D|1W|1M|ALL` (also
-`&start=` for the in-game window) · `/api/game?event_ticker=` (ESPN score/clock/logos) ·
+`&start=` for the in-game window) · **`/api/lines?event=<game_event_ticker>`**
+(spread + total ladders for a game; `{spread, total}` or nulls; 20s server cache) ·
+`/api/game?event_ticker=` (ESPN score/clock/logos) ·
 `/api/quote?ticker=&side=&contracts=` · `GET/POST /api/bets` · `/api/bets/{id}/close` ·
 `/api/bets/{id}/force_settle` · `/api/settle` · `/api/parlays` (GET list / POST create)
 · `/api/parlays/{id}/force_settle` · `/api/account` · `/api/summary` (light: balance +
@@ -435,8 +459,18 @@ hardening, `/api/summary`, PWA.
   and assorted cleanups (no Qty column, tidy "Your bets on this market" cards).
   Working tree is clean; every change committed + pushed to `origin/main` (Render
   auto-deploys). SW cache at `nrb-shell-v16`.
-- ✅ **SHIPPED & LIVE 2026-06-27 (this session)** — all pushed to `origin/main`, SW cache
-  now **`nrb-shell-v28`**, working tree clean. Each item is detailed in the per-file
+- ✅ **SPREAD / TOTAL betting lines (2026-06-27, SW `nrb-shell-v29`)** — game detail
+  pages now show a **"More ways to bet"** card with slider-style **margin-of-victory
+  (spread)** and **over/under (total)** bets, exactly like mainstream sportsbooks
+  (slide to 1.5 / 2.5 / 3.5…). Pulled from Kalshi's sibling SPREAD/TOTAL ladder
+  series (same event suffix); each rung is a real market so betting reuses the
+  normal fill/quote path. New `/api/lines` endpoint + `kalshi.fetch_game_lines`;
+  detail.js `loadLines()`/`renderLines()` + the slider UI; verified end-to-end on a
+  live server (lines fetched, quote + Under/Over bets placed with correct labels).
+  Only ~15% of games (the major/liquid ones) carry these ladders; non-game markets
+  and games without them simply don't show the card.
+- ✅ **SHIPPED & LIVE 2026-06-27 (earlier this session)** — all pushed to `origin/main`,
+  SW cache **`nrb-shell-v28`**. Each item is detailed in the per-file
   sections above; summary:
   1. **Community polish** — bet cards show the OUTCOME backed (not just market+amount);
      comments capture the live score/clock at post time (`comments.game_state`); a combined
