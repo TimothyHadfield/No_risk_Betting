@@ -1,0 +1,137 @@
+/* "Our Purpose" page — mission statement + a researched, cited paper on the
+   harms of real-money sports betting. Summary up top; full paper behind a
+   "Learn more" reveal. Owns: purpose.js / purpose.css. */
+
+.pp-page { max-width: 760px; margin: 0 auto; padding: 4px 0 40px; }
+
+/* ---- hero / mission ---- */
+.pp-hero { padding: 8px 0 6px; }
+.pp-hero .pp-kicker {
+  font: 800 11px var(--font); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--accent);
+}
+.pp-hero h1 { font-size: 30px; line-height: 1.12; margin: 8px 0 10px; letter-spacing: -.02em; }
+.pp-hero .pp-lede { font-size: 16px; line-height: 1.55; color: var(--text-soft, var(--text)); }
+.pp-hero .pp-lede strong { color: var(--accent); font-weight: 700; }
+
+/* ---- creator note ---- */
+.pp-creator {
+  margin: 20px 0; padding: 16px 18px; border-radius: var(--radius);
+  background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.pp-creator h2 { font-size: 14px; margin: 0 0 8px; color: var(--accent); }
+.pp-creator p { font-size: 14.5px; line-height: 1.6; margin: 0 0 8px; }
+.pp-creator p:last-child { margin-bottom: 0; }
+
+/* ---- summary section ---- */
+.pp-summary { margin-top: 26px; }
+.pp-summary h2, .pp-full h2.pp-secs-title {
+  font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin: 0 0 14px;
+}
+.pp-summary p { font-size: 15px; line-height: 1.62; margin: 0 0 14px; }
+
+/* stat callouts */
+.pp-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0 22px; }
+.pp-stat {
+  background: var(--bg-elev2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 12px; text-align: center;
+}
+.pp-stat-num { font: 800 24px var(--font); color: var(--accent); line-height: 1.05; }
+.pp-stat-num.neg { color: var(--no); }
+.pp-stat-lbl { font-size: 11.5px; color: var(--muted); line-height: 1.35; margin-top: 6px; }
+
+/* takeaway bullets */
+.pp-points { list-style: none; padding: 0; margin: 6px 0 0; }
+.pp-points li {
+  position: relative; padding: 9px 0 9px 28px; font-size: 14.5px; line-height: 1.55;
+  border-top: 1px solid var(--border);
+}
+.pp-points li:first-child { border-top: none; }
+.pp-points li::before {
+  content: ""; position: absolute; left: 4px; top: 15px; width: 9px; height: 9px;
+  border-radius: 2px; background: var(--accent);
+}
+.pp-points li strong { font-weight: 700; }
+
+/* ---- learn more toggle ---- */
+.pp-more-wrap { text-align: center; margin: 24px 0 8px; }
+.pp-more {
+  display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px;
+  font-size: 14px; font-weight: 700; cursor: pointer; border-radius: var(--radius-pill);
+  background: var(--bg-elev2); color: var(--text); border: 1px solid var(--border-strong);
+  transition: border-color .12s, color .12s, background .12s;
+}
+.pp-more:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.pp-more .pp-chev { transition: transform .2s; font-size: 12px; }
+.pp-more.open .pp-chev { transform: rotate(180deg); }
+
+/* ---- full paper (hidden until expanded) ---- */
+.pp-full { display: none; margin-top: 14px; }
+.pp-full.show { display: block; animation: pp-fade .25s ease; }
+@keyframes pp-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.pp-paper-head { padding: 14px 0 4px; border-top: 1px solid var(--border); margin-top: 8px; }
+.pp-paper-head h2 { font-size: 22px; line-height: 1.2; margin: 14px 0 6px; letter-spacing: -.01em; }
+.pp-paper-head .pp-byline { font-size: 12.5px; color: var(--muted); }
+.pp-abstract {
+  font-size: 14px; line-height: 1.6; font-style: italic; color: var(--text);
+  background: var(--bg-elev2); border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0; padding: 12px 16px; margin: 16px 0 6px;
+}
+
+.pp-section { margin-top: 26px; }
+.pp-section h3 {
+  font-size: 17px; margin: 0 0 10px; letter-spacing: -.01em;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.pp-section p { font-size: 14.5px; line-height: 1.66; margin: 0 0 13px; }
+.pp-section ul { margin: 0 0 13px; padding-left: 20px; }
+.pp-section li { font-size: 14.5px; line-height: 1.6; margin-bottom: 8px; }
+.pp-section strong { font-weight: 700; }
+
+/* inline citation superscript link, e.g. ...claim.[3] */
+.pp-ref-link {
+  font-size: 11px; font-weight: 700; color: var(--accent); text-decoration: none;
+  vertical-align: super; line-height: 0; padding: 0 1px; cursor: pointer;
+}
+.pp-ref-link:hover { text-decoration: underline; }
+
+/* caveat / nuance callout */
+.pp-note {
+  font-size: 13.5px; line-height: 1.55; background: rgba(231,184,80,.10);
+  border: 1px solid rgba(231,184,80,.3); border-radius: var(--radius-sm);
+  padding: 11px 14px; margin: 4px 0 14px; color: var(--text);
+}
+.pp-note b { color: var(--gold); }
+
+/* ---- works cited ---- */
+.pp-refs { margin-top: 30px; padding-top: 8px; border-top: 1px solid var(--border); }
+.pp-refs h3 { font-size: 17px; margin: 14px 0 12px; }
+.pp-refs ol { margin: 0; padding-left: 26px; }
+.pp-refs li {
+  font-size: 12.5px; line-height: 1.55; margin-bottom: 12px; color: var(--text-soft, var(--text));
+  scroll-margin-top: 80px;
+}
+.pp-refs li.flash { animation: pp-flash 1.4s ease; }
+@keyframes pp-flash {
+  0%, 30% { background: var(--accent-soft); }
+  100% { background: transparent; }
+}
+.pp-refs a { color: var(--accent); word-break: break-word; }
+.pp-refs .pp-ref-src { color: var(--muted); }
+
+/* closing disclaimer */
+.pp-foot {
+  margin-top: 28px; padding: 14px 16px; border-radius: var(--radius-sm);
+  background: var(--bg-elev2); border: 1px solid var(--border);
+  font-size: 12.5px; line-height: 1.6; color: var(--muted);
+}
+
+@media (max-width: 480px) {
+  .pp-hero h1 { font-size: 25px; }
+  .pp-stats { grid-template-columns: 1fr; }
+  .pp-stat { display: flex; align-items: center; gap: 14px; text-align: left; padding: 12px 14px; }
+  .pp-stat-num { font-size: 22px; }
+  .pp-stat-lbl { margin-top: 0; }
+}

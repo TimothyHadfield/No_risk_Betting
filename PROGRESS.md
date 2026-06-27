@@ -334,6 +334,23 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   active alerts to the **cached** events feed (no extra Kalshi calls), fires a notification,
   and one-shots the alert. Unread count rides on `/api/summary` (`unread`) → red
   `.burger-badge` dot, refreshed by `NRB.refreshAccount`/`NRB.refreshBadge`.
+- `purpose.js`/`purpose.css` — **"Our Purpose" view (added 2026-06-27).** Burger →
+  **Our Purpose** (`data-action="purpose"` → `NRB.go("purpose")`). The app's mission page:
+  a hero ("the thrill of betting, without the part that ruins lives"), a first-person
+  **creator note**, a **summarized version** (3 stat callouts + key-takeaway bullets), then a
+  **"Learn more" toggle** (`#pp-more`) that reveals the **full cited research paper** on the
+  harms of real-money sports betting + the predatory industry. Built from a **deep-research
+  pass** (multi-agent web search + adversarial fact-checking) plus two targeted follow-up
+  agents for the vig/parlay math and predatory-practice sourcing. **All claims are footnoted**:
+  a `REFS` array (id/cite/url) drives auto-numbered inline `[n]` superscripts (`cite(...ids)`)
+  AND the **Works Cited** list; clicking an `[n]` opens the paper (if collapsed) and
+  smooth-scrolls+flashes the matching reference. Every source has a **direct, verified URL**
+  (swapped SSRN→open UCLA PDF so it doesn't 403; paywalled ones — WaPo/WSJ/NYT/Guardian —
+  flagged as such). Deliberately EXCLUDES weak/uncited stats (e.g. the "only 3% of bettors
+  profit" and "700% more notifications" claims that circulate but lack a primary source);
+  working-paper / associational findings are labeled as such. Closes with the 1-800-GAMBLER
+  helpline. Static content (no API calls). NOTE: the creator note is written in a generic
+  first-person voice — the user may want to personalize it.
 - `slip.js`/`slip.css` — floating bet-slip button + panel for **parlays**.
 - `views.css` — portfolio + analytics styles.
 - `styles.css` — design tokens (dark default + light theme via `:root[data-theme=light]`),
@@ -459,6 +476,16 @@ hardening, `/api/summary`, PWA.
   and assorted cleanups (no Qty column, tidy "Your bets on this market" cards).
   Working tree is clean; every change committed + pushed to `origin/main` (Render
   auto-deploys). SW cache at `nrb-shell-v16`.
+- ✅ **"Our Purpose" page (2026-06-27, SW `nrb-shell-v30`)** — a mission/about section in
+  the burger menu making the case for *why* this app uses fake money. A creator note + a
+  summarized version (stat callouts + bullets) sit on top; a **"Learn more"** toggle reveals a
+  full, **cited research paper** on the harms of real-money sports betting (the rigged math/vig,
+  post-PASPA financial damage, loss concentration on a vulnerable few, problem-gambling/mental-
+  health/suicide data, and predatory industry practices — VIP grooming, banning winners, push-
+  notification dark patterns). Sourced via a multi-agent **deep-research** pass + adversarial
+  fact-checking; **24 references, each with a direct working URL** and auto-numbered inline
+  citations. New files `purpose.js`/`purpose.css`; drawer item + route added. (Backlog idea the
+  user wanted: educate users on the negatives & the app's purpose — done.)
 - ✅ **SPREAD / TOTAL betting lines (2026-06-27, SW `nrb-shell-v29`)** — game detail
   pages now show a **"More ways to bet"** card with slider-style **margin-of-victory
   (spread)** and **over/under (total)** bets, exactly like mainstream sportsbooks

@@ -648,6 +648,7 @@
     if (action === "profile") return NRB.go("profile");
     if (action === "analytics") return NRB.go("analytics");
     if (action === "notifications") return NRB.go("notifications");
+    if (action === "purpose") return NRB.go("purpose");
     if (action === "reset") return resetFlow();
     NRB.toast(action.charAt(0).toUpperCase() + action.slice(1) + " — coming soon");
   }
