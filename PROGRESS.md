@@ -226,6 +226,13 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   tabs**, Cash/Equity w/ help dots, **account button**), sticky section bar, `#view`,
   burger drawer (SVG icons), onboarding, connection banner, toast, **multi-panel auth
   modal** (login/signup/recovery/show-code/account/**profile&privacy**/change-pw/delete).
+  **DRAWER SLIMMED (2026-06-27):** trimmed from 13 flat items to 9 in two groups —
+  dropped **Home/Community/Account** (already in the top bar: brand+Markets tab, Community
+  tab, header account button) and the dead **Settings** placeholder; remaining items are a
+  nav group (Watchlist, Your Activity, Forecasting Score, Analytics, Notifications, Our
+  Purpose) + a **"Settings"** labeled group (`.drawer-label`: Predict-then-bet, Theme,
+  Reset balance [red on hover]). `drawerAction` home/community/account branches in util.js
+  are now dead-but-harmless; `#drawer-account-label` removal is null-guarded.
   Loads all CSS/JS (incl `social.css`/`social.js`), manifest, registers the SW.
 - `social.js`/`social.css` — Community (leaderboard / all-bets / all-comments), public
   profile view, reusable comments thread (mounted on detail's left column), like

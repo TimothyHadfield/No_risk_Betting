@@ -438,5 +438,12 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); box-sh
   justify-content: center; color: var(--muted); flex-shrink: 0; }
 .drawer-item:hover .ic { color: var(--accent); }
 .drawer-item .ico-svg { width: 19px; height: 19px; }
+/* small section label that groups the lower (settings) items */
+.drawer-label { font: 700 10px var(--font); text-transform: uppercase; letter-spacing: .08em;
+  color: var(--faint); padding: 8px 22px 4px; margin-top: 10px; border-top: 1px solid var(--border);
+  padding-top: 14px; }
+/* destructive action reads red on hover */
+.drawer-item-danger:hover { background: var(--no-soft); color: var(--no); }
+.drawer-item-danger:hover .ic { color: var(--no); }
 .drawer-foot { margin-top: auto; padding: 16px; color: var(--faint); font-size: 11.5px;
   border-top: 1px solid var(--border); }
