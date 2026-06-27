@@ -1,0 +1,46 @@
+/* Dedicated bet page (NRB.views.bet). Reuses .detail-back / .detail-stepper /
+   .detail-step / .detail-confirm / .detail-disclaimer from detail.css. */
+
+.bet-page { max-width: 560px; margin: 0 auto; padding: 4px 0 40px; }
+.bet-card { padding: 20px; margin-top: 8px; }
+
+.bet-side-tag { display: inline-block; font: 800 10.5px var(--font); text-transform: uppercase;
+  letter-spacing: .07em; padding: 4px 11px; border-radius: var(--radius-pill); margin-bottom: 12px; }
+.bet-side-tag.yes { background: var(--accent-soft); color: var(--accent); }
+.bet-side-tag.no { background: var(--no-soft); color: var(--no); }
+
+.bet-name { font-size: 24px; line-height: 1.18; letter-spacing: -.01em; margin: 0 0 4px; }
+.bet-sub { font-size: 13.5px; line-height: 1.4; }
+.bet-sub:empty { display: none; }
+
+.bet-odds { display: flex; align-items: baseline; gap: 12px; margin: 14px 0 20px;
+  padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.bet-mult { font-size: 30px; font-weight: 800; }
+
+.bet-field { display: block; }
+.bet-field-lbl { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+  margin-bottom: 8px; }
+.bet-stepper { grid-template-columns: 48px 1fr 48px; max-width: 220px; }
+.bet-stepper input[type="number"] { font-size: 18px; }
+
+.bet-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.bet-chip { padding: 8px 16px; font: 700 13.5px var(--font); cursor: pointer;
+  background: var(--bg-elev2); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill); transition: all .12s; }
+.bet-chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+.bet-quote { background: var(--bg-elev2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 14px; margin: 20px 0 16px; min-height: 56px; }
+.bet-quote-empty { font-size: 13px; padding: 6px 0; }
+.bet-quote-row { display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 14px; padding: 5px 0; }
+.bet-strong { font-weight: 700; font-size: 15px; }
+
+.bet-place { font-size: 16px; padding: 13px; transition: background .12s, border-color .12s; }
+.bet-place:disabled { opacity: .6; cursor: default; }
+.bet-place.detail-confirm { background: var(--gold); border-color: var(--gold); color: #2a1e02;
+  font-size: 14px; box-shadow: 0 0 0 3px rgba(231, 184, 80, .2); }
+.bet-place.detail-confirm:hover { background: #f0c869; border-color: #f0c869; }
+.bet-add { margin-top: 9px; padding: 10px; font-size: 13px; font-weight: 600;
+  border: 1px solid var(--border-strong); color: var(--muted); }
+.bet-add:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }

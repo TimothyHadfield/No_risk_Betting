@@ -394,78 +394,62 @@
   .dpos.done .dpos-stats { grid-template-columns: repeat(3, 1fr); }
 }
 
-/* ---- spread / total betting lines (slider) ---- */
+/* ---- margin of victory / total betting lines ---- */
 .detail-lines:empty { display: none; }
-.detail-lines-card { padding: 16px; margin-top: 16px; }
-.detail-line-block { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
-.detail-line-block:first-of-type { margin-top: 6px; padding-top: 0; border-top: none; }
-.detail-line-h { font-size: 13.5px; font-weight: 700; margin-bottom: 10px; }
-.detail-line-h .muted { font-weight: 500; font-size: 12.5px; }
+.mov-card { padding: 16px; margin-top: 16px; }
+.mov-block { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
+.mov-block:first-of-type { margin-top: 10px; padding-top: 2px; border-top: none; }
+.mov-h { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); margin-bottom: 12px; }
+.mov-h .muted { font-weight: 500; text-transform: none; letter-spacing: 0; }
 
-/* segmented team / over-under toggle */
-.detail-line-segs { display: flex; gap: 6px; margin-bottom: 14px; }
-.detail-line-seg {
-  flex: 1; min-width: 0; padding: 9px 10px; font-size: 13px; font-weight: 700;
-  background: var(--bg-elev2); color: var(--muted); cursor: pointer;
-  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: all .12s;
-}
-.detail-line-seg:hover { color: var(--text); }
-.detail-line-seg.active {
-  background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
-}
+/* statement: "Team wins by more than 2.5" */
+.mov-statement { display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  font-size: 17px; line-height: 1.3; }
+.mov-team { display: inline-flex; align-items: center; gap: 5px; font: 800 17px var(--font);
+  color: var(--accent); background: var(--accent-soft); cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-pill); padding: 4px 13px; transition: background .12s; }
+.mov-team:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.mov-swap { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; fill: none; opacity: .85; }
+.mov-said { color: var(--text); font-weight: 500; }
+.mov-line { font-size: 20px; font-weight: 800; color: var(--accent); min-width: 22px; text-align: center; }
 
-/* the line slider + the numbers scale beneath it */
-.detail-line-slider { margin: 4px 2px 12px; }
-.detail-line-range {
-  -webkit-appearance: none; appearance: none; width: 100%; height: 6px;
-  border-radius: 999px; background: var(--bg-elev); outline: none; cursor: pointer;
-  border: 1px solid var(--border-strong);
-}
-.detail-line-range::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none; width: 22px; height: 22px;
-  border-radius: 50%; background: var(--accent); border: 3px solid var(--bg-elev2);
-  box-shadow: 0 1px 4px rgba(0,0,0,.4); cursor: pointer;
-}
-.detail-line-range::-moz-range-thumb {
-  width: 22px; height: 22px; border-radius: 50%; background: var(--accent);
-  border: 3px solid var(--bg-elev2); box-shadow: 0 1px 4px rgba(0,0,0,.4); cursor: pointer;
-}
-.detail-line-scale {
-  display: flex; justify-content: space-between; margin-top: 8px;
-  font: 600 12px var(--font); color: var(--muted);
-}
-.detail-line-scale span { flex: 1; text-align: center; transition: color .12s; }
-.detail-line-scale span.on { color: var(--accent); font-weight: 800; transform: scale(1.18); }
+/* center-locked number slider: numbers scroll under a fixed center box */
+.mov-slider-wrap { position: relative; margin: 6px 0 14px; }
+.mov-center { position: absolute; left: 50%; top: 2px; bottom: 6px; width: 60px;
+  transform: translateX(-50%); z-index: 0; pointer-events: none;
+  border-radius: 13px; background: var(--accent-soft);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 42%, transparent); }
+.mov-slider { position: relative; z-index: 1; display: flex; overflow-x: auto;
+  scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  padding: 10px 0; cursor: grab;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent); }
+.mov-slider::-webkit-scrollbar { display: none; }
+.mov-pad { flex: 0 0 0; }
+.mov-num { flex: 0 0 72px; scroll-snap-align: center; text-align: center; cursor: pointer;
+  font: 700 17px var(--font); color: var(--muted); padding: 6px 0;
+  transition: color .12s, transform .12s; }
+.mov-num.on { color: var(--accent); font-weight: 800; transform: scale(1.45); }
 
-/* live pick + odds readout */
-.detail-line-readout {
-  background: var(--bg-elev2); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px;
-}
-.detail-line-pick { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
-.detail-line-nums { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font-size: 13px; }
-.detail-line-mult { font-size: 16px; font-weight: 800; }
-.detail-line-win { margin-left: auto; }
-
-/* per-block trade row: wager stepper + place button side by side */
-.detail-line-trade { display: grid; grid-template-columns: 150px 1fr; gap: 10px; align-items: stretch; }
-.detail-line-stepper { grid-template-columns: 36px 1fr 36px; }
-.detail-line-stepper input[type="number"] { font-size: 15px; }
-.detail-line-place { font-size: 14px; padding: 10px; transition: background .12s, border-color .12s; }
-.detail-line-place:disabled { opacity: .6; cursor: default; }
-.detail-line-place.detail-confirm {
-  background: var(--gold); border-color: var(--gold); color: #2a1e02;
-  font-size: 12.5px; box-shadow: 0 0 0 3px rgba(231, 184, 80, .2);
-}
-.detail-line-place.detail-confirm:hover { background: #f0c869; border-color: #f0c869; }
-.detail-line-slip {
-  margin-top: 8px; padding: 7px; font-size: 12px; font-weight: 600;
-  border: 1px solid var(--border-strong); color: var(--muted);
-}
-.detail-line-slip:hover { color: var(--accent); border-color: var(--accent); background: var(--yes-soft); }
-
-@media (max-width: 420px) {
-  .detail-line-trade { grid-template-columns: 1fr; }
-  .detail-line-win { margin-left: 0; width: 100%; }
-}
+/* Yes/No odds bars — fill width tracks the implied chance */
+.mov-bars { display: flex; flex-direction: column; gap: 9px; }
+.mov-bar { position: relative; display: flex; align-items: center; gap: 10px; overflow: hidden;
+  height: 48px; padding: 0 15px; border-radius: var(--radius-sm); cursor: pointer; text-align: left;
+  border: 1px solid var(--border-strong); background: var(--bg-elev2); color: var(--text);
+  transition: border-color .12s, transform .06s; }
+.mov-bar:active { transform: scale(.99); }
+.mov-bar.yes:hover { border-color: var(--accent); }
+.mov-bar.no:hover { border-color: var(--no); }
+.mov-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; z-index: 0; transition: width .3s ease; }
+.mov-bar.yes .mov-bar-fill { background: var(--yes-soft); }
+.mov-bar.no .mov-bar-fill { background: var(--no-soft); }
+.mov-bar-lbl { position: relative; z-index: 1; font-weight: 700; font-size: 15px; min-width: 32px; }
+.mov-bar.yes .mov-bar-lbl { color: var(--accent); }
+.mov-bar.no .mov-bar-lbl { color: var(--no); }
+.mov-bar-pct { position: relative; z-index: 1; font-size: 12.5px; }
+.mov-bar-odds { position: relative; z-index: 1; margin-left: auto; font-size: 17px; font-weight: 800; }
+.mov-bar.yes .mov-bar-odds { color: var(--accent); }
+.mov-bar.no .mov-bar-odds { color: var(--no); }

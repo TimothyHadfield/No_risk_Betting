@@ -306,17 +306,20 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   (not "contracts") with live "→ win $X" + two-step confirm. **SCHEDULED TIME (2026-06-27):**
   when a game hasn't started, the score area shows "Scheduled · &lt;kickoff in the viewer's
   local timezone&gt;" (e.g. "Sat, Jul 4, 7:00 PM MDT") from `S.market.occurrence_ts` via
-  `fmtKickoff` + `Intl` — works even when ESPN doesn't match. **SPREAD / TOTAL
-  SLIDER (2026-06-27):** a "More ways to bet" card in the LEFT column (under the
-  chart) on game events. `loadLines()` fetches `/api/lines` (only when
-  `isGameEvent()`); if the game has ladders it renders a **Margin of victory** block
-  (team segment + a discrete `<input type=range>` slider across 1.5/2.5/3.5… with a
-  live odds readout — back the team to cover) and a **Total** block (Over/Under
-  segment + slider across the O/U lines). Each block has its own wager stepper +
-  two-step-confirm Place + Add-to-slip; selection lives in `S.lineState` (survives
-  the 30s price re-poll; a focus guard skips the rebuild while you're typing a
-  wager). Bets POST the line ticker with an explicit `outcome_name` (e.g.
-  "Under 5.5 runs", "A's by 2.5+") and show in Portfolio. **predict-then-bet** slider
+  `fmtKickoff` + `Intl` — works even when ESPN doesn't match. **MARGIN / TOTAL
+  ODDS-BAR REDESIGN (2026-06-27):** a "More ways to bet" card in the LEFT column on
+  game events. `loadLines()` fetches `/api/lines` (only when `isGameEvent()`). Each
+  block is now: a plain **statement** ("<Team> wins by more than <line>" / "Combined
+  <unit> more than <line>") + a **center-locked number slider** (`.mov-slider`: a
+  scroll-snap row of the ladder lines with fixed-px end-pads sized by `initSlider` so
+  any number sits dead-center under a highlight box; the centered number IS the
+  selection — scroll handler rounds `scrollLeft/itemW` → rung, highlights it, updates
+  the statement+bars live) + two **Yes/No odds bars** (`.mov-bar`: fill width tracks
+  the implied chance, multiplier on the right). Spread team is a tap-to-cycle pill
+  (`.mov-team`). No inline wager anymore — **tapping a bar calls `goToBet()` →
+  `NRB.go("bet", {...})`** (the new dedicated bet page). Live 30s re-poll updates
+  bar prices in place (`refreshLinesPrices`) without disturbing the slider scroll.
+  **predict-then-bet** slider
   (opt-in, blind-by-default), **"Your position" card** + **chart entry markers**,
   **"Add to slip"**, HTML tooltip (clamped, never clips), 5s live poll + 30s chart
   refresh.
@@ -358,6 +361,16 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   working-paper / associational findings are labeled as such. Closes with the 1-800-GAMBLER
   helpline. Static content (no API calls). NOTE: the creator note is written in a generic
   first-person voice — the user may want to personalize it.
+- `bet.js`/`bet.css` — **dedicated bet page (`NRB.views.bet`, added 2026-06-27).** The
+  start of a new betting flow: betting options elsewhere show only odds/multiplier, and
+  tapping one navigates HERE (`NRB.go("bet", {ticker, side, name, title, eventTicker,
+  returnTicker, price})`). Shows what you're backing (outcome + side badge + live
+  multiplier/chance), an **amount** field (stepper + quick $5/$10/$25/$50/$100 chips), a
+  live quote (cost / payout / profit via `/api/quote`), a two-step-confirm **Place bet**,
+  and **+ Add to parlay** (`NRB.slip.add`). Reuses `/api/market` (fresh price/title),
+  `/api/quote`, `/api/bets` (with `outcome_name`). Back returns to `returnTicker`'s market.
+  Currently reached from the margin/total odds bars; the broader plan is to route ALL
+  betting options through this page (the "major betting changes" the user flagged).
 - `slip.js`/`slip.css` — floating bet-slip button + panel for **parlays**.
 - `views.css` — portfolio + analytics styles.
 - `styles.css` — design tokens (dark default + light theme via `:root[data-theme=light]`),
@@ -483,6 +496,13 @@ hardening, `/api/summary`, PWA.
   and assorted cleanups (no Qty column, tidy "Your bets on this market" cards).
   Working tree is clean; every change committed + pushed to `origin/main` (Render
   auto-deploys). SW cache at `nrb-shell-v16`.
+- ✅ **Margin-of-victory redesign + new bet page (2026-06-27, SW `nrb-shell-v33`)** — the
+  spread/total section is now: a statement ("Team wins by more than X") + a center-locked
+  number slider (numbers scroll, selector fixed center, middle highlighted) + Yes/No odds
+  bars whose width tracks the chance with the multiplier on the right. Tapping a bar no
+  longer bets inline — it opens a **new dedicated bet page** (`bet.js`) where you pick the
+  amount and Place or Add-to-parlay. This is the first step of the user's planned betting-flow
+  overhaul: every betting option should eventually just show odds, then route to this page.
 - ✅ **"Our Purpose" page (2026-06-27, SW `nrb-shell-v30`)** — a mission/about section in
   the burger menu making the case for *why* this app uses fake money. A creator note + a
   summarized version (stat callouts + bullets) sit on top; a **"Learn more"** toggle reveals a
