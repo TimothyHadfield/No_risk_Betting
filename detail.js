@@ -31,7 +31,8 @@
       wager: 10,       // dollar wager (replaces raw contracts in the UI)
       market: null,
       meta: {},
-      multi: false,    // mutually-exclusive multi-outcome event?
+      multi: false,    // multi-market event? (outcome selector shown)
+      exclusive: true, // multi: pick-ONE (true) vs independent Yes/No per outcome (false)
       outcomes: [],    // [{name, ticker, price}] (multi) — derived from siblings
       points: [],      // binary single-series history
       series: [],      // multi-outcome: [{name, ticker, color, points:[{t,p}]}]
@@ -65,6 +66,8 @@
     const sibs = (res && res.siblings) || [];
     if (sibs.length >= 2) {
       S.multi = true;
+      // exclusive = pick one (game outcomes); independent = Yes/No per outcome
+      S.exclusive = (res.exclusive !== false);
       S.outcomes = sibs.map((s) => ({
         name: s.yes_sub_title || s.title || s.ticker,
         ticker: s.ticker,
@@ -76,6 +79,7 @@
       }));
     } else {
       S.multi = false;
+      S.exclusive = true;
       S.outcomes = [];
     }
     return S.multi;
@@ -237,8 +241,9 @@
           <!-- trade panel -->
           <div class="detail-side">
             <div class="card detail-trade">
-              <div class="detail-card-title">Pick an outcome</div>
+              <div class="detail-card-title" id="d-trade-title">Pick an outcome</div>
               <div class="detail-outcomes" id="d-side-toggle"></div>
+              <div class="detail-yesno hidden" id="d-yesno"></div>
 
               <div class="detail-predict" id="d-predict"></div>
 
@@ -283,7 +288,8 @@
     let sub;
     if (S.multi) {
       const o = selectedOutcome();
-      sub = o ? ("Backing: " + o.name) : (m && m.yes_sub_title);
+      const nm = o ? o.name : (m && m.yes_sub_title);
+      sub = nm ? ("Backing: " + nm + (!S.exclusive ? (S.side === "no" ? " — No" : " — Yes") : "")) : "";
     } else {
       sub = m && (S.side === "no" ? m.no_sub_title : m.yes_sub_title);
     }
@@ -680,13 +686,14 @@
   // current ask price of whatever is selected (for wager -> contracts)
   function selectedPrice() {
     const m = S.market || {};
+    // No side (independent multi or binary): the ask to buy "No"
+    if (S.side === "no") {
+      return (m.no_ask != null) ? m.no_ask : (m.last_price != null ? 1 - m.last_price : null);
+    }
+    // Yes side, exclusive multi: use the selected outcome's ask
     if (S.multi) {
       const o = selectedOutcome();
       if (o && o.price != null) return o.price;
-      return (m.yes_ask != null) ? m.yes_ask : m.last_price;
-    }
-    if (S.side === "no") {
-      return (m.no_ask != null) ? m.no_ask : (m.last_price != null ? 1 - m.last_price : null);
     }
     return (m.yes_ask != null) ? m.yes_ask : m.last_price;
   }
@@ -711,6 +718,10 @@
   function renderSideToggle() {
     const host = document.getElementById("d-side-toggle");
     if (!host) return;
+    // card title hints at the interaction for this market type
+    const titleEl = document.getElementById("d-trade-title");
+    if (titleEl) titleEl.textContent = !S.multi ? "Take a side"
+      : (S.exclusive ? "Pick an outcome" : "Pick one, then Yes or No");
     const entries = outcomeEntries();
     // >6 outcomes -> compact scrollable rows; otherwise big boxes
     const compact = S.multi && entries.length > 6;
@@ -729,6 +740,41 @@
     host.querySelectorAll(".detail-outcome").forEach((b) => {
       b.addEventListener("click", () => selectOutcome(b.dataset.key));
     });
+    renderYesNo();
+  }
+
+  // independent multi (each outcome is its own Yes/No market): a Yes/No segment
+  // for the currently-selected outcome. Hidden in exclusive/binary modes.
+  function renderYesNo() {
+    const host = document.getElementById("d-yesno");
+    if (!host) return;
+    if (!(S.multi && !S.exclusive)) { host.className = "detail-yesno hidden"; host.innerHTML = ""; return; }
+    host.className = "detail-yesno";
+    const m = S.market || {};
+    const yesC = NRB.odds.chance(m);
+    const noC = (yesC == null) ? null : 1 - yesC;
+    const o = selectedOutcome();
+    const nm = (o && o.name) || m.yes_sub_title || "this outcome";
+    host.innerHTML = `
+      <div class="detail-yesno-lbl muted">Bet on ${fmt.esc(nm)}</div>
+      <div class="detail-yesno-seg">
+        <button class="detail-yn ${S.side === "yes" ? "active is-yes" : ""}" data-side="yes">
+          <span class="detail-yn-side">Yes</span><span class="detail-yn-pct tnum">${odds.prob(yesC)}</span></button>
+        <button class="detail-yn ${S.side === "no" ? "active is-no" : ""}" data-side="no">
+          <span class="detail-yn-side">No</span><span class="detail-yn-pct tnum">${odds.prob(noC)}</span></button>
+      </div>`;
+    host.querySelectorAll(".detail-yn").forEach((b) =>
+      b.addEventListener("click", () => setSide(b.dataset.side)));
+  }
+
+  // change Yes/No for the currently-selected outcome (independent mode + binary)
+  function setSide(side) {
+    if ((side !== "yes" && side !== "no") || side === S.side) return;
+    S.side = side;
+    resetForecast();   // forecast is per-side
+    renderYesNo();
+    renderHead();
+    requestQuote();
   }
 
   // select an outcome (multi: a sibling ticker; binary: "yes"/"no")
@@ -736,7 +782,7 @@
     if (S.multi) {
       if (!key || key === S.ticker) return;
       S.ticker = key;
-      S.side = "yes";
+      if (S.exclusive) S.side = "yes";   // exclusive: always back the picked outcome
       resetForecast();   // forecast is per-outcome
       renderSideToggle();
       renderHead();
@@ -774,7 +820,12 @@
 
   // display name of the currently selected outcome (for confirm + toast)
   function selectedName() {
-    if (S.multi) { const o = selectedOutcome(); return o ? o.name : ""; }
+    if (S.multi) {
+      const o = selectedOutcome();
+      const nm = o ? o.name : "";
+      // independent: include the Yes/No side, e.g. "France — No"
+      return (!S.exclusive && nm) ? (nm + " — " + (S.side === "no" ? "No" : "Yes")) : nm;
+    }
     return S.side === "no" ? "No" : yesOutcomeName();
   }
 
@@ -874,7 +925,7 @@
     host.className = "detail-predict open";
     // implied chance of the SELECTED side (robust; "No" = 1 - yes chance)
     const yesChance = yesSpot(S.market);
-    const market = (!S.multi && S.side === "no" && yesChance != null)
+    const market = (S.side === "no" && yesChance != null)
       ? (1 - yesChance) : yesChance;
     const marketPct = (market == null) ? null : Math.round(market * 100);
     const youPct = Math.round(fc.value);

@@ -563,13 +563,16 @@ class Handler(BaseHTTPRequestHandler):
         meta = kalshi.get_meta(ticker)
         m["logo"] = m.get("logo") or espn.logo_for(meta.get("series"),
                                                     m.get("yes_sub_title"))
-        # Sibling markets: for a multi-outcome event (e.g. a game with
-        # TeamA / TeamB / Tie) return every outcome's live market so the detail
-        # view can show ALL outcomes (never "No"). Prices fetched live (15s cache);
-        # logo comes from the cached event market.
+        # Sibling markets: for ANY multi-market event return every sub-market so
+        # the detail view can show them all. Two flavors, distinguished by
+        # `exclusive` (= Kalshi's mutually_exclusive):
+        #   * exclusive (e.g. a game's TeamA / TeamB / Tie): pick ONE outcome.
+        #   * independent (e.g. "Teams to Win All 3 Group Matches"): each team is
+        #     its own Yes/No market, so the user bets Yes or No on each.
+        # Prices fetched live (15s cache); logo comes from the cached event market.
         siblings = []
         ev = kalshi.find_cached_event(meta.get("event_ticker"))
-        if ev and ev.get("mutually_exclusive") and len(ev.get("markets", [])) > 1:
+        if ev and len(ev.get("markets", [])) > 1:
             for s in ev["markets"]:
                 lm = live_market(s["ticker"]) or s
                 siblings.append({
@@ -580,6 +583,7 @@ class Handler(BaseHTTPRequestHandler):
                     "logo": s.get("logo"),
                 })
         self._send_json({"market": m, "meta": meta, "siblings": siblings,
+                         "exclusive": bool(ev.get("mutually_exclusive")) if ev else True,
                          "event_title": ev["title"] if ev else None})
 
     # range -> (period_interval_minutes, lookback_seconds)

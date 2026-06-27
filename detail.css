@@ -213,6 +213,25 @@
   min-width: 78px; text-align: right; order: 3;
 }
 
+/* ---- Yes/No segment for independent multi-markets (each outcome a Yes/No) ---- */
+.detail-yesno { margin: -4px 0 16px; }
+.detail-yesno.hidden { display: none; }
+.detail-yesno-lbl { font-size: 12.5px; margin-bottom: 7px; }
+.detail-yesno-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.detail-yn {
+  display: flex; align-items: baseline; justify-content: center; gap: 8px;
+  padding: 11px; border-radius: var(--radius-sm); cursor: pointer; font-family: var(--font);
+  border: 1.5px solid var(--border-strong); background: var(--bg-elev2); color: var(--text);
+  transition: background .12s, border-color .12s;
+}
+.detail-yn:hover { border-color: var(--border); }
+.detail-yn-side { font-size: 15px; font-weight: 800; }
+.detail-yn-pct { font-size: 13px; font-weight: 700; color: var(--muted); }
+.detail-yn.active.is-yes { background: var(--yes-soft); border-color: var(--yes); }
+.detail-yn.active.is-yes .detail-yn-pct { color: var(--yes); }
+.detail-yn.active.is-no { background: var(--no-soft); border-color: var(--no); }
+.detail-yn.active.is-no .detail-yn-pct { color: var(--no); }
+
 /* ---- forecast widget (opt-in, collapsed, subtle) ---- */
 .detail-predict { margin-bottom: 14px; }
 .detail-predict:empty { display: none; }

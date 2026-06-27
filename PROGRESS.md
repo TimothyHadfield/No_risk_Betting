@@ -267,7 +267,14 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
 - `detail.js`/`detail.css` — the market detail view (the biggest file). Multi-line
   price chart (one line per outcome, **all resampled onto a shared timeline** so hover
   dots align), time-range pills + a "Game" in-game range, live score/clock, two/N
-  **outcome bet boxes** (never shows "No" for multi-outcome events), **$ wager** input
+  **outcome bet boxes**. **THREE market shapes (independent type added 2026-06-27):**
+  (1) binary Yes/No; (2) *exclusive* multi (game A/B/Tie, WC winner — pick ONE, bet Yes);
+  (3) *independent* multi (e.g. "Teams to Win All 3 Group Matches" — each team is its own
+  Yes/No market). `api_market` returns `siblings` for ANY multi-market event plus an
+  `exclusive` flag (= Kalshi `mutually_exclusive`). For independent (`S.exclusive=false`)
+  the detail shows the full (scrollable) outcome list AND a **Yes/No segment** (`#d-yesno`,
+  `renderYesNo`/`setSide`) for the selected outcome, so you can bet Yes or No on each; the
+  chart still plots the top-3 outcomes by Yes chance (+ your selection). **$ wager** input
   (not "contracts") with live "→ win $X" + two-step confirm. **SCHEDULED TIME (2026-06-27):**
   when a game hasn't started, the score area shows "Scheduled · &lt;kickoff in the viewer's
   local timezone&gt;" (e.g. "Sat, Jul 4, 7:00 PM MDT") from `S.market.occurrence_ts` via
@@ -302,7 +309,7 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   shell, shared atoms, market box, carousel, drawer, onboarding, banner, icons.
 - `sw.js` — service worker, **network-first** (always fresh online, cache fallback
   offline). **Bump `CACHE` (e.g. `nrb-shell-v16`) on every shell change** and add any
-  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v25`.)
+  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v26`.)
 - `manifest.json`, `icon.svg` — PWA install metadata.
 
 ### API (all JSON; money in dollars; prices dollars 0–1; user via `X-User-Id` header)
