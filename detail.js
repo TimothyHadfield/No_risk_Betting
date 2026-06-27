@@ -31,6 +31,7 @@
       wager: 10,       // dollar wager (replaces raw contracts in the UI)
       market: null,
       meta: {},
+      event_title: null, // broad event title (for multi header + thread/alert titles)
       multi: false,    // multi-market event? (outcome selector shown)
       exclusive: true, // multi: pick-ONE (true) vs independent Yes/No per outcome (false)
       outcomes: [],    // [{name, ticker, price}] (multi) — derived from siblings
@@ -320,8 +321,16 @@
     const m = S.market, meta = S.meta;
     const $ = (id) => document.getElementById(id);
     if (!$("d-title")) return;
-    $("d-event").textContent = meta.event_title || meta.category || "";
-    $("d-title").textContent = m ? (m.title || S.ticker) : S.ticker;
+    // For multi-outcome markets keep the title BROAD (the event question, e.g.
+    // "Golden Boot Winner") rather than one option ("Will Dembele lead in goals?").
+    const broadTitle = meta.event_title || S.event_title || (m && m.title) || S.ticker;
+    if (S.multi) {
+      $("d-event").textContent = meta.category || "";
+      $("d-title").textContent = broadTitle;
+    } else {
+      $("d-event").textContent = meta.event_title || meta.category || "";
+      $("d-title").textContent = m ? (m.title || S.ticker) : S.ticker;
+    }
     const iconEl = $("d-icon");
     if (iconEl) iconEl.innerHTML = NRB.icon(headerIconName(), headerIconLogo());
     let sub;
@@ -333,8 +342,6 @@
       sub = m && (S.side === "no" ? m.no_sub_title : m.yes_sub_title);
     }
     $("d-subtitle").textContent = sub || "";
-    const lbl = document.querySelector(".detail-prob-lbl");
-    if (lbl) lbl.textContent = S.multi ? "Selected chance" : "YES chance";
     renderFav();
     renderProb();
   }
@@ -348,24 +355,40 @@
   }
 
   function renderProb() {
+    const block = document.querySelector(".detail-prob");
+    if (!block) return;
+
+    // Multi-outcome (broad title): show the current chances of the TOP 3 options
+    // instead of a single "selected chance".
+    if (S.multi) {
+      block.className = "detail-prob detail-prob-multi";
+      const top = outcomesByChance().slice(0, 3);
+      block.innerHTML =
+        `<div class="detail-prob-lbl muted">Top contenders</div>` +
+        (top.length
+          ? top.map((o) => `
+              <div class="detail-prob-top-row">
+                <span class="detail-prob-top-nm">${fmt.esc(o.name)}</span>
+                <span class="detail-prob-top-pct tnum">${odds.prob(o.chance)}</span>
+              </div>`).join("")
+          : `<div class="detail-prob-top-row muted">—</div>`);
+      return;
+    }
+
+    // Binary: single big YES chance + change vs the start of the range
+    block.className = "detail-prob";
+    block.innerHTML =
+      `<div class="detail-prob-num tnum" id="d-prob">—</div>
+       <div class="detail-prob-chg tnum" id="d-change"></div>
+       <div class="detail-prob-lbl muted">YES chance</div>`;
     const probEl = document.getElementById("d-prob");
     const chgEl = document.getElementById("d-change");
     if (!probEl) return;
     const spot = yesSpot(S.market);
     probEl.textContent = fmt.pct(spot);
-
-    // first point of the active chart series (selected outcome in multi mode)
-    let series = S.points;
-    if (S.multi) {
-      const o = selectedOutcome();
-      const found = o && S.series.find((s) => s.ticker === o.ticker);
-      series = (found && found.points) || [];
-    }
-
-    // change vs first point of current chart range
+    const series = S.points;
     if (series.length && spot != null) {
-      const first = series[0].p;
-      const delta = spot - first;
+      const delta = spot - series[0].p;
       const pts = Math.round(delta * 100);
       if (pts === 0) {
         chgEl.textContent = "0%";
@@ -1253,6 +1276,7 @@
     if (S.destroyed || !res) return;
     if (res.market) S.market = res.market;
     if (res.meta) S.meta = res.meta;
+    if (res.event_title) S.event_title = res.event_title;
     ingestSiblings(res);     // keeps S.multi + outcome prices fresh
     renderHead();
     renderSideToggle();
@@ -1514,6 +1538,7 @@
       if (res) {
         if (res.market) S.market = res.market;
         if (res.meta) S.meta = res.meta;
+        if (res.event_title) S.event_title = res.event_title;
         ingestSiblings(res);
       }
 
@@ -1534,6 +1559,7 @@
             if (r2) {
               if (r2.market) S.market = r2.market;
               if (r2.meta) S.meta = r2.meta;
+              if (r2.event_title) S.event_title = r2.event_title;
               ingestSiblings(r2);
             }
           } catch (e) { /* keep what we have */ }
