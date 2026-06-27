@@ -388,7 +388,7 @@ session writes a shared contract + foundation, then spawns specialist sub-agents
 Permissions: the user granted full Bash/PowerShell access (settings allow rules added;
 PowerShell was missing from the user-settings allowlist — that's fixed).
 
-## Current status (as of 2026-06-26)
+## Current status (as of 2026-06-27)
 **Built & verified (headless/API):** the full app — live markets, market detail with
 multi-line chart + live score + in-game timeline, betting with honest fills, parlays,
 predict-then-bet, bet tracking (My Bets bar + position card + chart markers), Forecasting
@@ -435,6 +435,40 @@ hardening, `/api/summary`, PWA.
   and assorted cleanups (no Qty column, tidy "Your bets on this market" cards).
   Working tree is clean; every change committed + pushed to `origin/main` (Render
   auto-deploys). SW cache at `nrb-shell-v16`.
+- ✅ **SHIPPED & LIVE 2026-06-27 (this session)** — all pushed to `origin/main`, SW cache
+  now **`nrb-shell-v28`**, working tree clean. Each item is detailed in the per-file
+  sections above; summary:
+  1. **Community polish** — bet cards show the OUTCOME backed (not just market+amount);
+     comments capture the live score/clock at post time (`comments.game_state`); a combined
+     **"Live"** feed when total activity ≤ 25 (else the 3 firehose tabs).
+  2. **Favorite & hide categories** — ☆ star floats a category to the top; ✕ hides it
+     (still searchable); a **"+"** popover re-adds hidden ones; **"You may like"** suggests
+     related categories when you favorite one. (`NRB.favCat`/`hiddenCat`, `RELATED` map.)
+  3. **Reset = new "season/period"** (no longer wipes data) — balance back to $1,000, past
+     bets kept and viewable via a **stats period picker** (current / previous / overall);
+     the reset top-up never counts as profit. (db `season` columns + `seasons` table,
+     `/api/seasons`, `/api/analytics?season=`.)
+  4. **Burger drawer scrolls** — the bottom items (incl. **Reset balance**) are reachable.
+  5. **Price alerts + real notifications center** (the 🔔 works now) — set a target % from a
+     market; a poller fires a notification when crossed; **unread badge** on the burger.
+     (`alerts`/`notifications` tables, `/api/alerts`, `/api/notifications`, notifs.js/css.)
+  6. **Sports futures/awards markets** — curated marquee non-game markets (WC Winner, Golden
+     Boot, WC awards, Ballon d'Or, NBA/WNBA/NFL titles & MVPs) grouped into 6 favoritable
+     sections (`FEATURED_FUTURES`). Top feed section is now **"★ Your favorites"** (starred
+     markets). **Live games highlighted red** in the feed; scheduled games show **kickoff in
+     the viewer's local timezone** on the detail (`occurrence_ts`).
+  7. **Detail chart fixes** — `NRB.odds.chance()` fixes illiquid long-shots that showed
+     **100% / 1.00x** (now real implied %); chart plots only the **top 3 outcomes** (+ your
+     selection); **y-axis auto-scales** to the data peak (bottom 0%); noise **smoothing**
+     (edge-preserving — spikes/oscillation flattened to the middle, sustained moves kept
+     sharp); tooltip always shows the **date/time** (was a raw epoch number).
+  8. **Independent multi-markets** — events like "Teams to Win All 3 Group Matches" (each
+     option its own Yes/No) now show the full outcome list + a **Yes/No segment** so you
+     bet Yes or No on each (`exclusive` flag on `/api/market`, `S.exclusive`).
+  9. **Broad titles** — multi-outcome detail header shows the broad event question (e.g.
+     "Golden Boot Winner") not one option; header shows the **top-3 contenders'** chances.
+  - **Standing instruction (memory `always-push-to-site`):** commit + push to `main`
+    yourself after changes — don't wait to be asked. (User confirmed 2026-06-27.)
 
 ### How accounts/social were tested (no JS engine locally)
 Backend verified two ways: (1) data-layer scripts against a temp SQLite db and against
@@ -454,7 +488,8 @@ any code.
 - ✅ DONE: global leaderboard (ranked by accuracy/ROI) + public profiles + social feed.
 - ✅ DONE (2026-06-27): Notification center + price alerts (the 🔔 is now real — see
   notifs.js + alerts/notifications API above).
-- "Live now" section (games currently in-play via ESPN state).
+- ~~"Live now" section~~ — user did NOT want a separate section; instead live games are
+  **highlighted red** in the feed (done 2026-06-27, `NRB.isLiveGame`).
 - Daily forecast challenge / streaks / badges (the leaderboard exists to build on).
 - Edge / Kelly bet sizing (uses predict-then-bet edge).
 - Market resolution rules + related markets on detail; share score-card image; sounds.
