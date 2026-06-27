@@ -178,6 +178,45 @@
     };
   }
 
+  // tooltip title: ALWAYS a readable date + time (never the raw epoch number)
+  function fmtTipTime(ms) {
+    if (ms == null || isNaN(ms)) return "";
+    try {
+      return new Date(ms).toLocaleString(undefined, {
+        month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+      });
+    } catch (e) { return ""; }
+  }
+
+  // Smooth order-book noise out of a price series while preserving genuine moves.
+  // Edge-preserving (median-anchored bilateral) filter: for each point, take the
+  // local window's median as a robust "level", then average only the neighbours
+  // on that level (within RANGE). Effects:
+  //   * isolated spikes that snap back  -> ignored (minority in the window)
+  //   * rapid back-and-forth bouncing   -> settles to the MIDDLE of both sides
+  //   * steep sustained drops/spikes     -> kept sharp (the far level is excluded)
+  // Keeps every timestamp (only values are adjusted), so hover/alignment are intact.
+  function smoothSeries(points) {
+    const n = points ? points.length : 0;
+    if (n < 5) return points ? points.slice() : [];
+    const W = 3;          // window radius (7-point window)
+    const RANGE = 0.06;   // values within 6pp of the local median are one "level"
+    const out = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const lo = Math.max(0, i - W), hi = Math.min(n - 1, i + W);
+      const win = [];
+      for (let j = lo; j <= hi; j++) win.push(points[j].p);
+      win.sort((a, b) => a - b);
+      const med = win[Math.floor(win.length / 2)];   // robust local center
+      let sum = 0, wt = 0;
+      for (let j = lo; j <= hi; j++) {
+        if (Math.abs(points[j].p - med) <= RANGE) { sum += points[j].p; wt++; }
+      }
+      out[i] = { t: points[i].t, p: wt ? sum / wt : points[i].p };
+    }
+    return out;
+  }
+
   // ============================================================ rendering
   function skeleton() {
     return `
@@ -626,6 +665,10 @@
             axis: "x",                 // pair all datasets at one timestamp (aligned x)
             position: "nearest",
             external: externalTooltip,
+            callbacks: {
+              // ALWAYS show the date/time, never the raw epoch-ms number
+              title: (items) => fmtTipTime(items && items[0] && items[0].parsed && items[0].parsed.x),
+            },
           },
         },
       },
@@ -1344,7 +1387,7 @@
       if (S.destroyed || seq !== S.histSeq) return;
       S.series = top.map((o, i) => ({
         name: o.name, ticker: o.ticker, color: colorFor(i),
-        points: (results[i] && results[i].points) || [],
+        points: smoothSeries((results[i] && results[i].points) || []),
       }));
       buildChart();
       renderProb();
@@ -1356,7 +1399,7 @@
       res = await NRB.api(historyUrl(S.ticker));
     } catch (e) { res = null; }
     if (S.destroyed || seq !== S.histSeq) return;
-    S.points = (res && res.points) || [];
+    S.points = smoothSeries((res && res.points) || []);
     buildChart();
     renderProb(); // change is relative to the first point of the (new) range
   }

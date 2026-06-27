@@ -266,7 +266,12 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   over favorited (a hidden+favorited category stays out until re-added, then floats back up).
 - `detail.js`/`detail.css` — the market detail view (the biggest file). Multi-line
   price chart (one line per outcome, **all resampled onto a shared timeline** so hover
-  dots align), time-range pills + a "Game" in-game range, live score/clock, two/N
+  dots align). **CHART CLEANUP (2026-06-27):** `smoothSeries()` edge-preserving
+  (median-anchored bilateral) filter removes order-book noise — isolated/reverting spikes
+  vanish, rapid back-and-forth settles to the MIDDLE of both sides, but steep *sustained*
+  moves stay sharp; y-axis auto-scales to the data peak (bottom 0%); tooltip title always
+  renders the date/time (`fmtTipTime`) instead of the raw epoch number. Time-range pills +
+  a "Game" in-game range, live score/clock, two/N
   **outcome bet boxes**. **THREE market shapes (independent type added 2026-06-27):**
   (1) binary Yes/No; (2) *exclusive* multi (game A/B/Tie, WC winner — pick ONE, bet Yes);
   (3) *independent* multi (e.g. "Teams to Win All 3 Group Matches" — each team is its own
@@ -309,7 +314,7 @@ Tiny server + vanilla-JS single-page app. **No build step, no frameworks.**
   shell, shared atoms, market box, carousel, drawer, onboarding, banner, icons.
 - `sw.js` — service worker, **network-first** (always fresh online, cache fallback
   offline). **Bump `CACHE` (e.g. `nrb-shell-v16`) on every shell change** and add any
-  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v26`.)
+  new JS/CSS file to the `SHELL` list. (Currently `nrb-shell-v27`.)
 - `manifest.json`, `icon.svg` — PWA install metadata.
 
 ### API (all JSON; money in dollars; prices dollars 0–1; user via `X-User-Id` header)
