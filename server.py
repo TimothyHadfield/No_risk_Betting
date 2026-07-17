@@ -588,6 +588,9 @@ class Handler(BaseHTTPRequestHandler):
                     "yes_ask": lm["yes_ask"], "no_bid": lm["no_bid"],
                     "no_ask": lm["no_ask"], "last_price": lm["last_price"],
                     "logo": s.get("logo"),
+                    # settlement state so the UI can mark an eliminated (settled-No)
+                    # outcome with an X instead of odds/payout
+                    "status": lm.get("status"), "result": lm.get("result") or "",
                 })
         self._send_json({"market": m, "meta": meta, "siblings": siblings,
                          "exclusive": bool(ev.get("mutually_exclusive")) if ev else True,

@@ -578,6 +578,9 @@
     const container = document.getElementById("view");
     container.innerHTML = ""; window.scrollTo(0, 0);
     mounted = view; NRB.current = { name, params: params || {} };
+    // expose the active view so the shell can adapt (e.g. hide the global top
+    // bar on the immersive market-detail view)
+    document.body.setAttribute("data-view", name);
     updateTopnav();
     Promise.resolve(view.mount(container, params || {}))
       .catch((e) => console.error("view mount error", name, e));

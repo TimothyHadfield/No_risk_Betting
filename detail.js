@@ -11,7 +11,7 @@
   const fmt = NRB.fmt;
   const odds = NRB.odds;
 
-  const RANGES = ["1H", "6H", "1D", "1W", "1M", "ALL"];
+  const RANGES = ["1D", "1W", "1M", "ALL"];
   const DEFAULT_RANGE = "1D";
   const POLL_MS = 5000;
   const HIST_REFRESH_MS = 30000;   // stream new 1-min candles for the active range
@@ -80,6 +80,9 @@
         price: (s.yes_ask != null) ? s.yes_ask : s.last_price,
         chance: NRB.odds.chance(s),
         logo: s.logo || null,
+        // eliminated = Kalshi has settled this outcome to "No" (definitively out,
+        // e.g. knocked out of the tournament) -> show an X instead of odds/payout
+        eliminated: isEliminated(s),
       }));
     } else {
       S.multi = false;
@@ -89,9 +92,24 @@
     return S.multi;
   }
 
-  // outcome objects sorted by current chance desc
+  // outcome objects sorted by current chance desc (eliminated ones sink to the bottom)
   function outcomesByChance() {
-    return S.outcomes.slice().sort((a, b) => (b.chance || 0) - (a.chance || 0));
+    return S.outcomes.slice().sort((a, b) => {
+      if (!!a.eliminated !== !!b.eliminated) return a.eliminated ? 1 : -1;
+      return (b.chance || 0) - (a.chance || 0);
+    });
+  }
+
+  // A market/outcome is "eliminated" once Kalshi has SETTLED it to No — i.e. it's
+  // definitively no longer possible (knocked out of the tournament, etc). We rely
+  // on the settled result, not just low odds, so a genuine long-shot isn't flagged.
+  function isEliminated(m) {
+    if (!m) return false;
+    const result = String(m.result || "").toLowerCase();
+    const status = String(m.status || "").toLowerCase();
+    const settled = status === "settled" || status === "finalized"
+      || status === "determined" || status === "closed";
+    return result === "no" || (settled && result !== "yes" && result !== "");
   }
 
   // tickers that belong to THIS market/event (market + siblings)
@@ -222,10 +240,14 @@
   }
 
   // ============================================================ rendering
+  // big, bold, text-less back chevron used at the top of the immersive view
+  const BACK_SVG = `<svg viewBox="0 0 24 24" width="30" height="30" fill="none"
+      stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>`;
+
   function skeleton() {
     return `
       <div class="detail-wrap">
-        <a class="detail-back" id="d-back">← Back to markets</a>
+        <button class="detail-back" id="d-back" aria-label="Back">${BACK_SVG}</button>
         <div class="detail-grid">
           <div class="detail-main">
             <div class="skeleton" style="height:120px;border-radius:var(--radius);margin-bottom:14px"></div>
@@ -241,44 +263,38 @@
   function shell() {
     return `
       <div class="detail-wrap">
-        <a class="detail-back" id="d-back">← Back to markets</a>
+        <button class="detail-back" id="d-back" aria-label="Back">${BACK_SVG}</button>
 
         <div class="detail-grid">
           <div class="detail-main">
-            <!-- header -->
+            <!-- header: category, title, (games) matchup -->
             <div class="detail-head">
-              <div class="detail-head-text">
-                <div class="detail-event muted" id="d-event"></div>
-                <div class="detail-title-row">
-                  <span class="detail-icon" id="d-icon"></span>
+              <div class="detail-head-top">
+                <div class="detail-head-text">
+                  <div class="detail-event muted" id="d-event"></div>
                   <h1 class="detail-title" id="d-title"></h1>
-                  <button class="detail-fav" id="d-fav" aria-label="Favorite" title="Add to watchlist">☆</button>
                 </div>
-                <div class="detail-sub muted" id="d-subtitle"></div>
-                <div class="detail-score hidden" id="d-score"></div>
+                <button class="detail-fav" id="d-fav" aria-label="Favorite" title="Add to watchlist">☆</button>
               </div>
-              <div class="detail-prob">
-                <div class="detail-prob-num tnum" id="d-prob">—</div>
-                <div class="detail-prob-chg tnum" id="d-change"></div>
-                <div class="detail-prob-lbl muted">YES chance</div>
-              </div>
+              <div class="detail-matchup hidden" id="d-matchup"></div>
             </div>
 
             <!-- hero chart -->
             <div class="card detail-chart-card">
-              <div class="detail-chart-bar">
-                <div class="detail-legend" id="d-legend"></div>
-                <div class="detail-pills" id="d-pills"></div>
-              </div>
+              <button class="detail-chat-btn" id="d-chat" type="button" aria-label="Open live chat">
+                <svg class="ico-svg" viewBox="0 0 24 24" width="17" height="17"><path d="M21 11.5a8.4 8.4 0 0 1-11.9 7.6L4 21l1.9-5.1A8.4 8.4 0 1 1 21 11.5z"/></svg>
+                <span>live chat</span>
+              </button>
               <div class="detail-chart-box">
                 <canvas id="d-chart"></canvas>
                 <div class="detail-chart-tip" id="d-tip"></div>
                 <div class="detail-chart-empty muted hidden" id="d-chart-empty">No price history available.</div>
               </div>
+              <div class="detail-chart-foot">
+                <div class="detail-vol muted tnum" id="d-vol"></div>
+                <div class="detail-pills" id="d-pills"></div>
+              </div>
             </div>
-
-            <!-- stats / rules -->
-            <div class="card detail-stats" id="d-stats"></div>
 
             <!-- spread / total betting lines (game events only) -->
             <div class="detail-lines" id="d-lines"></div>
@@ -319,6 +335,18 @@
             <div class="detail-position" id="d-position"></div>
           </div>
         </div>
+
+        <!-- slide-up live-chat sheet (discussion) -->
+        <div class="chat-sheet" id="d-chat-sheet" aria-hidden="true">
+          <div class="chat-sheet-backdrop" id="d-chat-backdrop"></div>
+          <div class="chat-sheet-panel" role="dialog" aria-label="Live chat">
+            <div class="chat-sheet-head">
+              <span class="chat-sheet-title">Live chat</span>
+              <button class="chat-sheet-close" id="d-chat-close" aria-label="Close">×</button>
+            </div>
+            <div class="chat-sheet-body" id="d-chat-body"></div>
+          </div>
+        </div>
       </div>`;
   }
 
@@ -337,19 +365,9 @@
       $("d-event").textContent = meta.event_title || meta.category || "";
       $("d-title").textContent = m ? (m.title || S.ticker) : S.ticker;
     }
-    const iconEl = $("d-icon");
-    if (iconEl) iconEl.innerHTML = NRB.icon(headerIconName(), headerIconLogo());
-    let sub;
-    if (S.multi) {
-      const o = selectedOutcome();
-      const nm = o ? o.name : (m && m.yes_sub_title);
-      sub = nm ? ("Backing: " + nm + (!S.exclusive ? (S.side === "no" ? " — No" : " — Yes") : "")) : "";
-    } else {
-      sub = m && (S.side === "no" ? m.no_sub_title : m.yes_sub_title);
-    }
-    $("d-subtitle").textContent = sub || "";
     renderFav();
-    renderProb();
+    renderMatchup();
+    renderVol();
   }
 
   function renderFav() {
@@ -360,64 +378,93 @@
     btn.textContent = on ? "★" : "☆";
   }
 
-  function renderProb() {
-    const block = document.querySelector(".detail-prob");
-    if (!block) return;
-
-    // Multi-outcome (broad title): show the current chances of the TOP 3 options
-    // instead of a single "selected chance".
-    if (S.multi) {
-      block.className = "detail-prob detail-prob-multi";
-      const top = outcomesByChance().slice(0, 3);
-      block.innerHTML =
-        `<div class="detail-prob-lbl muted">Top contenders</div>` +
-        (top.length
-          ? top.map((o) => `
-              <div class="detail-prob-top-row">
-                <span class="detail-prob-top-nm">${fmt.esc(o.name)}</span>
-                <span class="detail-prob-top-pct tnum">${odds.prob(o.chance)}</span>
-              </div>`).join("")
-          : `<div class="detail-prob-top-row muted">—</div>`);
-      return;
-    }
-
-    // Binary: single big YES chance + change vs the start of the range
-    block.className = "detail-prob";
-    block.innerHTML =
-      `<div class="detail-prob-num tnum" id="d-prob">—</div>
-       <div class="detail-prob-chg tnum" id="d-change"></div>
-       <div class="detail-prob-lbl muted">YES chance</div>`;
-    const probEl = document.getElementById("d-prob");
-    const chgEl = document.getElementById("d-change");
-    if (!probEl) return;
-    const spot = yesSpot(S.market);
-    probEl.textContent = fmt.pct(spot);
-    const series = S.points;
-    if (series.length && spot != null) {
-      const delta = spot - series[0].p;
-      const pts = Math.round(delta * 100);
-      if (pts === 0) {
-        chgEl.textContent = "0%";
-        chgEl.className = "detail-prob-chg tnum muted";
-      } else {
-        const up = pts > 0;
-        chgEl.textContent = (up ? "▲ " : "▼ ") + Math.abs(pts) + "%";
-        chgEl.className = "detail-prob-chg tnum " + (up ? "pos" : "neg");
-      }
-    } else {
-      chgEl.textContent = "";
-      chgEl.className = "detail-prob-chg tnum";
-    }
+  // small "$<vol> vol" tucked into the bottom-left of the chart
+  function renderVol() {
+    const host = document.getElementById("d-vol");
+    if (!host) return;
+    const v = S.market && S.market.volume;
+    host.textContent = (v != null) ? ("$" + fmt.vol(v) + " vol") : "";
   }
 
-  // ---- pills ---------------------------------------------------------------
+  // ---- matchup (sports games only): two big team crests with the abbreviated
+  // name below each, and the kickoff date/time (or live score+clock) centered
+  // between them. Built from ESPN when matched, else from the Kalshi outcomes.
+  function teamAbbrev(name, abbr) {
+    if (abbr) return abbr;
+    const n = String(name || "").trim();
+    if (n.length <= 14) return n;               // national teams etc. are short
+    const words = n.split(/\s+/);
+    return words[words.length - 1];             // "Manchester City" -> "City"
+  }
+  function matchupTeams() {
+    const g = S.game;
+    if (g && g.matched && (g.away || g.home)) {
+      const a = g.away || {}, h = g.home || {};
+      return [
+        { name: a.name || a.abbr || "", abbr: a.abbr, logo: a.logo },
+        { name: h.name || h.abbr || "", abbr: h.abbr, logo: h.logo },
+      ];
+    }
+    // fall back to the two team outcomes (drop a Tie/Draw option)
+    const teams = (S.outcomes || []).filter((o) => !/\b(tie|draw)\b/i.test(o.name));
+    if (teams.length >= 2) {
+      return [
+        { name: teams[0].name, logo: teams[0].logo },
+        { name: teams[1].name, logo: teams[1].logo },
+      ];
+    }
+    return null;
+  }
+  function renderMatchup() {
+    const host = document.getElementById("d-matchup");
+    if (!host) return;
+    if (!isGameEvent()) { host.classList.add("hidden"); host.innerHTML = ""; return; }
+    const teams = matchupTeams();
+    if (!teams) { host.classList.add("hidden"); host.innerHTML = ""; return; }
+
+    const g = S.game;
+    const now = Date.now() / 1000;
+    const occ = S.market && S.market.occurrence_ts;
+    const crest = (t) => t.logo
+      ? `<img class="icoflag-img logo" src="${fmt.esc(t.logo)}" alt="">`
+      : NRB.icon(t.name || "");
+    const teamHtml = (t) => `
+      <div class="detail-mt-team">
+        <span class="detail-mt-icon">${crest(t)}</span>
+        <span class="detail-mt-nm">${fmt.esc(teamAbbrev(t.name, t.abbr))}</span>
+      </div>`;
+
+    // center: live/finished score, else scheduled kickoff date+time
+    let center = "";
+    if (g && g.matched && (g.state === "in" || g.state === "post")) {
+      const live = g.state === "in";
+      const a = g.away || {}, h = g.home || {};
+      const score = `${a.score != null ? a.score : ""}–${h.score != null ? h.score : ""}`;
+      const dot = live ? `<span class="detail-live-dot"></span>` : "";
+      const statusCls = live ? "detail-mt-status live" : "detail-mt-status muted";
+      center = `<div class="detail-mt-score tnum">${fmt.esc(score)}</div>
+        <div class="${statusCls}">${dot}${fmt.esc(g.detail || (live ? "Live" : "Final"))}</div>`;
+    } else if (occ) {
+      const parts = fmtKickoffParts(occ);
+      center = `<div class="detail-mt-date">${fmt.esc(parts.date)}</div>
+        <div class="detail-mt-time">${fmt.esc(parts.time)}</div>`;
+    } else if (g && g.matched && g.state === "pre" && g.detail) {
+      center = `<div class="detail-mt-date muted">${fmt.esc(g.detail)}</div>`;
+    } else {
+      center = `<div class="detail-mt-vs muted">vs</div>`;
+    }
+
+    host.innerHTML = teamHtml(teams[0]) +
+      `<div class="detail-mt-center">${center}</div>` + teamHtml(teams[1]);
+    host.classList.remove("hidden");
+  }
+
+  // ---- pills (bottom-right of the chart: 1D / 1W / 1M / ALL) ----------------
   function renderPills() {
     const host = document.getElementById("d-pills");
     if (!host) return;
     host.innerHTML = "";
-    // for matched games with a known start, append a "Game" timeline pill
-    const ranges = S.startTs ? RANGES.concat(["Game"]) : RANGES.slice();
-    ranges.forEach((r) => {
+    RANGES.forEach((r) => {
       const b = NRB.el(`<button class="pill${r === S.range ? " active" : ""}">${r}</button>`);
       b.addEventListener("click", () => {
         if (S.range === r) return;
@@ -557,7 +604,6 @@
     if (emptyEl) emptyEl.classList.add("hidden");
 
     const ctx = canvas.getContext("2d");
-    const tFmt = tickFormatter(S.range);
 
     let datasets;
     if (S.multi) {
@@ -664,25 +710,24 @@
         maintainAspectRatio: false,
         animation: { duration: 300 },
         interaction: { mode: "index", intersect: false, axis: "x" },
-        layout: { padding: { top: 6, right: 12, bottom: 0, left: 6 } },
+        layout: { padding: { top: 6, right: 6, bottom: 0, left: 6 } },
+        // Clean, chrome-free chart: NO axes, NO gridlines, NO tick labels.
+        // The only way to read a time/date or value is to touch the chart, which
+        // shows the scrub line + the HTML tooltip.
         scales: {
           x: {
             type: "linear",
-            grid: { display: false },
+            display: false,
+            grid: { display: false, drawTicks: false },
             border: { display: false },
-            ticks: {
-              color: "#8b95a6", maxRotation: 0, autoSkip: true, maxTicksLimit: 6, font: { size: 11 },
-              callback: (v) => tFmt(v),
-            },
+            ticks: { display: false },
           },
           y: {
             min: 0, max: yMax,
-            grid: { color: "#232b38", drawTicks: false },
+            display: false,
+            grid: { display: false, drawTicks: false },
             border: { display: false },
-            ticks: {
-              color: "#8b95a6", maxTicksLimit: 5, font: { size: 11 },
-              callback: (v) => v + "%", padding: 8,
-            },
+            ticks: { display: false },
           },
         },
         plugins: {
@@ -738,21 +783,6 @@
       itemColor("var(--no)", "No", noPct);
   }
 
-  // ---- stats / rules -------------------------------------------------------
-  function renderStats() {
-    const host = document.getElementById("d-stats");
-    if (!host) return;
-    const m = S.market || {};
-    const status = m.status ? String(m.status) : "—";
-    const cell = (label, val, cls) =>
-      `<div class="detail-stat"><div class="detail-stat-lbl muted">${label}</div>
-        <div class="detail-stat-val tnum ${cls || ""}">${val}</div></div>`;
-    host.innerHTML =
-      cell("Volume", fmt.vol(m.volume)) +
-      cell("Open interest", fmt.vol(m.open_interest)) +
-      cell("Closes", fmt.dateShort(m.close_time)) +
-      cell("Status", `<span class="detail-status">${fmt.esc(status)}</span>`);
-  }
 
   // ---- trade panel ---------------------------------------------------------
   // current ask price of whatever is selected (for wager -> contracts)
@@ -776,7 +806,7 @@
     if (S.multi) {
       return outcomesByChance().map((o) => ({
         key: o.ticker, name: o.name, price: o.chance, logo: o.logo || null,
-        selected: o.ticker === S.ticker,
+        selected: o.ticker === S.ticker, eliminated: !!o.eliminated,
       }));
     }
     const m = S.market || {};
@@ -799,17 +829,31 @@
     const compact = S.multi && entries.length > 6;
     host.className = "detail-outcomes" + (compact ? " compact" : "");
 
-    host.innerHTML = entries.map((e) => `
-      <button class="detail-outcome ${e.selected ? "active is-yes" : ""}" data-key="${fmt.esc(e.key)}">
-        <span class="detail-outcome-head">
-          <span class="detail-outcome-ico">${NRB.icon(e.name, e.logo)}</span>
-          <span class="detail-outcome-nm">${fmt.esc(e.name)}</span>
-        </span>
-        <span class="detail-outcome-mult tnum">${odds.multStr(e.price)}</span>
-        <span class="detail-outcome-prob tnum muted">${odds.prob(e.price)} chance</span>
-      </button>`).join("");
+    host.innerHTML = entries.map((e) => {
+      // eliminated (settled-No) -> an X in place of odds/payout; not selectable
+      if (e.eliminated) {
+        return `
+          <div class="detail-outcome eliminated" aria-disabled="true">
+            <span class="detail-outcome-head">
+              <span class="detail-outcome-ico">${NRB.icon(e.name, e.logo)}</span>
+              <span class="detail-outcome-nm">${fmt.esc(e.name)}</span>
+            </span>
+            <span class="detail-outcome-x" aria-hidden="true">✕</span>
+            <span class="detail-outcome-prob muted">Eliminated</span>
+          </div>`;
+      }
+      return `
+        <button class="detail-outcome ${e.selected ? "active is-yes" : ""}" data-key="${fmt.esc(e.key)}">
+          <span class="detail-outcome-head">
+            <span class="detail-outcome-ico">${NRB.icon(e.name, e.logo)}</span>
+            <span class="detail-outcome-nm">${fmt.esc(e.name)}</span>
+          </span>
+          <span class="detail-outcome-mult tnum">${odds.multStr(e.price)}</span>
+          <span class="detail-outcome-prob tnum muted">${odds.prob(e.price)} chance</span>
+        </button>`;
+    }).join("");
 
-    host.querySelectorAll(".detail-outcome").forEach((b) => {
+    host.querySelectorAll("button.detail-outcome").forEach((b) => {
       b.addEventListener("click", () => selectOutcome(b.dataset.key));
     });
     renderYesNo();
@@ -1539,8 +1583,6 @@
     ingestSiblings(res);     // keeps S.multi + outcome prices fresh
     renderHead();
     renderSideToggle();
-    renderStats();
-    renderLegend();
   }
 
   // ---- live game score / clock (ESPN via /api/game) ------------------------
@@ -1557,7 +1599,7 @@
     const hadStart = !!S.startTs;
     S.game = matched ? res : null;
     S.startTs = (matched && res.start_ts) ? res.start_ts : null;
-    renderScore();
+    renderMatchup();
     // (re)show or hide the "Game" pill if availability changed
     if (!!S.startTs !== hadStart) {
       if (!S.startTs && S.range === "Game") { S.range = DEFAULT_RANGE; loadHistory(); }
@@ -1579,70 +1621,16 @@
     return clock ? `${score} · ${clock}` : score;
   }
 
-  // A scheduled kickoff formatted in the viewer's own timezone, e.g.
-  // "Sat, Jul 4, 7:00 PM MDT".
-  function fmtKickoff(ts) {
+  // A scheduled kickoff split into a date line + a time line, both in the
+  // viewer's own timezone, e.g. {date:"Sat, Jul 4", time:"7:00 PM MDT"}.
+  function fmtKickoffParts(ts) {
     try {
-      return new Date(ts * 1000).toLocaleString(undefined, {
-        weekday: "short", month: "short", day: "numeric",
-        hour: "numeric", minute: "2-digit", timeZoneName: "short",
-      });
-    } catch (e) { return ""; }
-  }
-
-  function renderScore() {
-    const host = document.getElementById("d-score");
-    if (!host) return;
-    const g = S.game;
-    const now = Date.now() / 1000;
-    const occ = S.market && S.market.occurrence_ts;
-    const away = (g && g.away) || {}, home = (g && g.home) || {};
-    // team logo image if provided, else fall back to flag/monogram
-    const teamIcon = (t) => t.logo
-      ? `<img class="icoflag-img logo" src="${fmt.esc(t.logo)}" alt="">`
-      : NRB.icon(t.name || t.abbr || "");
-
-    // 1) live or finished game (ESPN matched) -> score line
-    if (g && g.matched && (g.state === "in" || g.state === "post")) {
-      const live = g.state === "in";
-      const statusCls = live ? "detail-score-status live" : "detail-score-status muted";
-      const dot = live ? `<span class="detail-live-dot"></span>` : "";
-      host.innerHTML =
-        `<div class="detail-score-line">
-           <span class="detail-score-team">
-             ${teamIcon(away)}
-             <span class="detail-score-nm">${fmt.esc(away.abbr || away.name || "")}</span>
-             <span class="detail-score-num tnum">${fmt.esc(away.score != null ? away.score : "")}</span>
-           </span>
-           <span class="detail-score-sep">–</span>
-           <span class="detail-score-team">
-             <span class="detail-score-num tnum">${fmt.esc(home.score != null ? home.score : "")}</span>
-             <span class="detail-score-nm">${fmt.esc(home.abbr || home.name || "")}</span>
-             ${teamIcon(home)}
-           </span>
-         </div>
-         <div class="${statusCls}">${dot}${fmt.esc(g.detail || (live ? "Live" : "Final"))}</div>`;
-      host.classList.remove("hidden");
-      return;
-    }
-
-    // 2) scheduled game -> kickoff in the viewer's local time (from Kalshi)
-    if (occ && now < occ) {
-      host.innerHTML =
-        `<div class="detail-score-status muted detail-sched">Scheduled · ${fmt.esc(fmtKickoff(occ))}</div>`;
-      host.classList.remove("hidden");
-      return;
-    }
-
-    // 3) ESPN pre-game blurb fallback
-    if (g && g.matched && g.state === "pre" && g.detail) {
-      host.innerHTML = `<div class="detail-score-status muted">${fmt.esc(g.detail)}</div>`;
-      host.classList.remove("hidden");
-      return;
-    }
-
-    host.classList.add("hidden");
-    host.innerHTML = "";
+      const d = new Date(ts * 1000);
+      return {
+        date: d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }),
+        time: d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short" }),
+      };
+    } catch (e) { return { date: "", time: "" }; }
   }
 
   // build the /api/history URL for a given ticker honoring the active range/Game window
@@ -1673,7 +1661,6 @@
         points: smoothSeries((results[i] && results[i].points) || []),
       }));
       buildChart();
-      renderProb();
       return;
     }
 
@@ -1684,7 +1671,6 @@
     if (S.destroyed || seq !== S.histSeq) return;
     S.points = smoothSeries((res && res.points) || []);
     buildChart();
-    renderProb(); // change is relative to the first point of the (new) range
   }
 
   // ---- live polling --------------------------------------------------------
@@ -1747,6 +1733,41 @@
     if (addSlipBtn) addSlipBtn.addEventListener("click", addToSlip);
     const alertBtn = document.getElementById("d-alert");
     if (alertBtn) alertBtn.addEventListener("click", setAlert);
+
+    // live-chat slide-up sheet
+    const chatBtn = document.getElementById("d-chat");
+    if (chatBtn) chatBtn.addEventListener("click", openChat);
+    const chatClose = document.getElementById("d-chat-close");
+    if (chatClose) chatClose.addEventListener("click", closeChat);
+    const chatBack = document.getElementById("d-chat-backdrop");
+    if (chatBack) chatBack.addEventListener("click", closeChat);
+  }
+
+  // ---- live-chat sheet -----------------------------------------------------
+  // Mount the discussion thread lazily the first time the sheet is opened.
+  function mountChatThread() {
+    if (S.chatMounted) return;
+    const body = document.getElementById("d-chat-body");
+    if (!body || !(NRB.social && NRB.social.mountThread)) return;
+    try {
+      const title = (S.event_title) || (S.market && S.market.title) || S.ticker;
+      NRB.social.mountThread(body, "mkt:" + eventTicker(),
+        { ticker: S.ticker, title: title, gameState: gameTag });
+      S.chatMounted = true;
+    } catch (e) {}
+  }
+  function openChat() {
+    const sheet = document.getElementById("d-chat-sheet");
+    if (!sheet) return;
+    mountChatThread();
+    sheet.classList.add("open");
+    sheet.setAttribute("aria-hidden", "false");
+  }
+  function closeChat() {
+    const sheet = document.getElementById("d-chat-sheet");
+    if (!sheet) return;
+    sheet.classList.remove("open");
+    sheet.setAttribute("aria-hidden", "true");
   }
 
   // create a one-shot price alert for the selected outcome at a target chance
@@ -1838,34 +1859,22 @@
       wire();
       renderSideToggle();
       renderHead();
-      renderStats();
       renderToWin();   // instant payout readout before the first quote returns
       resetForecast(); // collapsed forecast affordance (only if predict enabled)
 
-      // fetch live game score/clock first so the "Game" pill (and live default) is known
+      // fetch live game score/clock first (for the matchup block)
       await loadGame();
       if (S.destroyed) return;
-      // for a matched, in-progress game default-select the in-game timeline
-      if (S.startTs && S.game && S.game.state === "in") S.range = "Game";
       renderPills();
 
-      await loadHistory();   // also (re)draws chart + change
+      await loadHistory();   // also (re)draws chart
       if (S.destroyed) return;
       await loadBets();      // "Your position" card + chart entry markers
       if (S.destroyed) return;
       runQuote();
       startPolling();
       loadLines();           // spread / total slider bets (game events only)
-
-      // community discussion for this market — in the LEFT column under the chart
-      if (NRB.social && NRB.social.mountThread) {
-        try {
-          const title = (S.event_title) || (S.market && S.market.title) || S.ticker;
-          const leftCol = container.querySelector(".detail-main") || container;
-          NRB.social.mountThread(leftCol, "mkt:" + eventTicker(),
-            { ticker: S.ticker, title: title, gameState: gameTag });
-        } catch (e) {}
-      }
+      // discussion is mounted lazily into the slide-up chat sheet on first open
     },
 
     unmount() {

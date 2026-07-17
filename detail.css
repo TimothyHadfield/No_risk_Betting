@@ -4,14 +4,18 @@
    Dim surfaces, mint accent, tabular nums.
    ============================================================ */
 
-.detail-wrap { display: block; padding: 0 14px; }
+/* top padding clears the iPhone status bar (the global top bar is hidden here) */
+.detail-wrap { display: block; padding: calc(env(safe-area-inset-top) + 10px) 14px 0; }
 
+/* big, bold, text-less back chevron */
 .detail-back {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 13.5px; font-weight: 600; color: var(--muted);
-  cursor: pointer; margin-bottom: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; margin: 0 0 4px -9px;
+  background: none; border: none; cursor: pointer; color: var(--text);
+  border-radius: var(--radius-sm);
 }
-.detail-back:hover { color: var(--accent); }
+.detail-back:hover { background: var(--bg-elev2); color: var(--accent); }
+.detail-back svg { display: block; }
 
 /* ---- layout: two columns desktop, stacked mobile ---- */
 .detail-grid {
@@ -22,29 +26,26 @@
 }
 .detail-main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .detail-main .so-thread { margin-top: 0; }   /* flex gap already spaces it */
-.detail-side { position: sticky; top: calc(var(--topbar-h) + 16px); }
+/* the global top bar is hidden on this view, so anchor near the top edge */
+.detail-side { position: sticky; top: calc(env(safe-area-inset-top) + 12px); }
 
 @media (max-width: 880px) {
   .detail-grid { grid-template-columns: 1fr; }
   .detail-side { position: static; }
 }
 
-/* ---- header ---- */
-.detail-head {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 18px; padding: 2px 2px 4px;
+/* ---- header: category (small), title (large), (games) matchup ---- */
+.detail-head { padding: 2px 2px 0; }
+.detail-head-top {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
 }
 .detail-head-text { min-width: 0; }
 .detail-event {
-  font-size: 12.5px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .04em; margin-bottom: 6px;
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; margin-bottom: 5px; color: var(--muted);
 }
-.detail-title-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.detail-icon { flex-shrink: 0; display: inline-flex; align-items: center; }
-.detail-icon .icoflag { font-size: 24px; width: 28px; }
-.detail-icon .icobadge { width: 28px; height: 28px; border-radius: 8px; font-size: 11px; }
 .detail-title {
-  font-size: 26px; line-height: 1.2; font-weight: 800; letter-spacing: -.02em;
+  font-size: 26px; line-height: 1.15; font-weight: 800; letter-spacing: -.02em;
   color: var(--text); min-width: 0;
 }
 .detail-fav {
@@ -54,26 +55,36 @@
 }
 .detail-fav:hover { color: var(--gold); transform: scale(1.08); }
 .detail-fav.on { color: var(--gold); }
-.detail-sub { font-size: 13.5px; margin-top: 6px; }
 
-/* ---- live game score / clock ---- */
-.detail-score {
-  margin-top: 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
-  padding: 9px 12px; background: var(--bg-elev2); border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+/* matchup (games only): crest | center(kickoff or live score) | crest */
+.detail-matchup {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  gap: 12px; margin-top: 18px; padding: 4px 2px 2px;
 }
-.detail-score-line { display: inline-flex; align-items: center; gap: 10px; }
-.detail-score-team { display: inline-flex; align-items: center; gap: 7px; }
-.detail-score-team .icoflag { font-size: 18px; width: 22px; }
-.detail-score-team .icobadge { width: 22px; height: 22px; border-radius: 6px; font-size: 9.5px; }
-.detail-score-nm { font-size: 13.5px; font-weight: 700; color: var(--text); }
-.detail-score-num { font-size: 19px; font-weight: 800; color: var(--text); letter-spacing: -.02em; }
-.detail-score-sep { color: var(--faint); font-weight: 700; }
-.detail-score-status {
-  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
-  display: inline-flex; align-items: center; gap: 6px;
+.detail-matchup.hidden { display: none; }
+.detail-mt-team {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0;
 }
-.detail-score-status.live { color: var(--accent); }
+.detail-mt-icon { display: inline-flex; align-items: center; justify-content: center; }
+.detail-mt-icon img, .detail-mt-icon .icoflag-img {
+  width: 58px; height: 58px; object-fit: contain; border-radius: 8px;
+}
+.detail-mt-icon .icoflag { font-size: 48px; width: 58px; }
+.detail-mt-icon .icobadge { width: 58px; height: 58px; border-radius: 14px; font-size: 21px; }
+.detail-mt-nm {
+  font-size: 14px; font-weight: 700; color: var(--text); text-align: center;
+  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.detail-mt-center { text-align: center; min-width: 88px; }
+.detail-mt-date { font-size: 13.5px; font-weight: 700; color: var(--text); }
+.detail-mt-time { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 2px; }
+.detail-mt-vs { font-size: 14px; font-weight: 700; }
+.detail-mt-score { font-size: 30px; font-weight: 800; letter-spacing: -.02em; color: var(--text); }
+.detail-mt-status {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  margin-top: 3px; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+}
+.detail-mt-status.live { color: var(--accent); }
 .detail-live-dot {
   width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
   box-shadow: 0 0 0 0 rgba(39, 209, 139, .55); animation: detail-live-pulse 1.4s infinite;
@@ -84,50 +95,29 @@
   100% { box-shadow: 0 0 0 0 rgba(39, 209, 139, 0); }
 }
 
-.detail-prob { text-align: right; flex-shrink: 0; }
-.detail-prob-num {
-  font-size: 42px; font-weight: 800; line-height: 1; letter-spacing: -.03em;
-  color: var(--text);
-}
-.detail-prob-chg { font-size: 15px; font-weight: 700; margin-top: 4px; }
-.detail-prob-lbl {
-  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .05em; margin-top: 3px;
-}
-/* multi-outcome: top-3 contenders instead of one big number */
-.detail-prob-multi { min-width: 168px; text-align: left; }
-.detail-prob-multi .detail-prob-lbl { text-align: left; margin: 0 0 6px; }
-.detail-prob-top-row {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-  padding: 3px 0;
-}
-.detail-prob-top-nm {
-  font-size: 13.5px; font-weight: 600; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;
-}
-.detail-prob-top-pct { font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
-
 /* ---- chart card ---- */
-.detail-chart-card { padding: 16px 16px 14px; }
-.detail-chart-bar {
+.detail-chart-card { padding: 12px 14px 12px; }
+
+/* "live chat" pill (opens the discussion sheet), pinned top-left above the graph */
+.detail-chat-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--bg-elev2); border: 1px solid var(--border-strong); color: var(--muted);
+  font: 600 12px var(--font); cursor: pointer; padding: 6px 11px 6px 9px;
+  border-radius: var(--radius-pill); margin-bottom: 8px;
+}
+.detail-chat-btn:hover { color: var(--accent); border-color: var(--accent); }
+.detail-chat-btn .ico-svg { width: 16px; height: 16px; }
+
+/* chart footer: "$ vol" bottom-left, range pills bottom-right */
+.detail-chart-foot {
   display: flex; align-items: center; justify-content: space-between;
-  flex-wrap: wrap; gap: 10px; margin-bottom: 12px;
+  gap: 10px; margin-top: 8px;
 }
+.detail-vol { font-size: 12px; font-weight: 600; }
 .detail-pills { display: flex; gap: 6px; flex-wrap: wrap; }
-.detail-pills .pill { padding: 5px 12px; font-size: 12.5px; }
+.detail-pills .pill { padding: 5px 11px; font-size: 12px; }
 
-/* chart legend (live current chances) */
-.detail-legend { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.detail-legend-item { display: inline-flex; align-items: baseline; gap: 6px; font-size: 13px; }
-.detail-legend-dot {
-  width: 9px; height: 9px; border-radius: 50%; align-self: center; flex-shrink: 0;
-}
-.detail-legend-dot.is-yes { background: var(--accent); }
-.detail-legend-dot.is-no { background: var(--no); }
-.detail-legend-nm { color: var(--muted); font-weight: 600; }
-.detail-legend-pct { font-weight: 800; color: var(--text); }
-
-.detail-chart-box { position: relative; height: 300px; overflow: visible;
+.detail-chart-box { position: relative; height: 260px; overflow: visible;
   /* scrubbing the chart with a finger must never select/highlight the graph */
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .detail-chart-box canvas { width: 100% !important; height: 100% !important;
@@ -165,22 +155,6 @@
   letter-spacing: .05em; color: var(--muted); margin-bottom: 12px;
 }
 
-/* ---- stats / rules ---- */
-.detail-stats {
-  padding: 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
-}
-@media (max-width: 560px) { .detail-stats { grid-template-columns: repeat(2, 1fr); gap: 14px 8px; } }
-.detail-stat { display: flex; flex-direction: column; gap: 4px; }
-.detail-stat-lbl {
-  font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
-}
-.detail-stat-val { font-size: 16px; font-weight: 700; }
-.detail-status {
-  display: inline-block; text-transform: capitalize; font-size: 13px;
-  padding: 2px 8px; border-radius: var(--radius-pill);
-  background: var(--yes-soft); color: var(--accent);
-}
-
 /* ---- trade panel ---- */
 .detail-trade { padding: 18px; }
 
@@ -214,6 +188,18 @@
   background: var(--no-soft); border-color: var(--no);
 }
 .detail-outcome.active.is-no .detail-outcome-mult { color: var(--no); }
+
+/* eliminated outcome (settled-No): an X where odds/payout would be, no odds */
+.detail-outcome.eliminated {
+  cursor: default; opacity: .6; border-style: dashed;
+  border-color: var(--border); background: var(--bg-elev2);
+}
+.detail-outcome.eliminated:hover { transform: none; border-color: var(--border); }
+.detail-outcome.eliminated .detail-outcome-nm { text-decoration: line-through; color: var(--muted); }
+.detail-outcome-x {
+  font-size: 24px; font-weight: 800; line-height: 1; color: var(--no);
+}
+.detail-outcomes.compact .detail-outcome-x { font-size: 17px; margin-left: auto; }
 
 /* compact scrollable rows for many outcomes (>6) */
 .detail-outcomes.compact {
@@ -457,3 +443,41 @@
 .mov-bar-odds { position: relative; z-index: 1; margin-left: auto; font-size: 17px; font-weight: 800; }
 .mov-bar.yes .mov-bar-odds { color: var(--accent); }
 .mov-bar.no .mov-bar-odds { color: var(--no); }
+
+/* ---- live-chat slide-up sheet (discussion) ---- */
+.chat-sheet { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
+.chat-sheet.open { pointer-events: auto; }
+.chat-sheet-backdrop {
+  position: absolute; inset: 0; background: rgba(0, 0, 0, .55);
+  opacity: 0; transition: opacity .22s;
+}
+.chat-sheet.open .chat-sheet-backdrop { opacity: 1; }
+.chat-sheet-panel {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  max-height: 86vh; display: flex; flex-direction: column;
+  background: var(--bg-elev); border-top: 1px solid var(--border);
+  border-radius: 18px 18px 0 0; box-shadow: var(--shadow-lg);
+  transform: translateY(100%); transition: transform .26s ease;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.chat-sheet.open .chat-sheet-panel { transform: translateY(0); }
+/* centered, width-capped on larger screens */
+@media (min-width: 720px) {
+  .chat-sheet-panel { left: 50%; right: auto; width: 560px; transform: translate(-50%, 100%); }
+  .chat-sheet.open .chat-sheet-panel { transform: translate(-50%, 0); }
+}
+.chat-sheet-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.chat-sheet-title { font-size: 15px; font-weight: 800; letter-spacing: -.01em; }
+.chat-sheet-close {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 26px; line-height: 1; padding: 0 4px;
+}
+.chat-sheet-close:hover { color: var(--text); }
+.chat-sheet-body {
+  overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 14px 18px;
+}
+/* the thread inside the sheet shouldn't render as a nested card */
+.chat-sheet-body .so-thread { border: none; background: none; box-shadow: none; padding: 0; margin: 0; }

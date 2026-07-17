@@ -88,6 +88,10 @@ a { color: inherit; text-decoration: none; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 
+/* Immersive market-detail view: hide the whole global top bar (the market has
+   its own big back arrow + minimal header). */
+body[data-view="detail"] .topbar { display: none; }
+
 /* ---------- top bar ---------- */
 .topbar {
   position: sticky; top: 0; z-index: 40; background: color-mix(in srgb, var(--bg) 82%, transparent);
