@@ -127,8 +127,12 @@
 .detail-legend-nm { color: var(--muted); font-weight: 600; }
 .detail-legend-pct { font-weight: 800; color: var(--text); }
 
-.detail-chart-box { position: relative; height: 300px; overflow: visible; }
-.detail-chart-box canvas { width: 100% !important; height: 100% !important; }
+.detail-chart-box { position: relative; height: 300px; overflow: visible;
+  /* scrubbing the chart with a finger must never select/highlight the graph */
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.detail-chart-box canvas { width: 100% !important; height: 100% !important;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent; }
 .detail-chart-empty {
   position: absolute; inset: 0; display: flex; align-items: center;
   justify-content: center; font-size: 14px;

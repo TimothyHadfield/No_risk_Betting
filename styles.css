@@ -73,6 +73,8 @@ body {
   font-family: var(--font); font-size: 15px; line-height: 1.5;
   -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
   font-feature-settings: "cv05" 1, "ss01" 1;
+  /* remove the 300ms double-tap delay and double-tap-to-zoom on touch */
+  touch-action: manipulation;
 }
 h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -.018em; }
 h1 { letter-spacing: -.03em; }

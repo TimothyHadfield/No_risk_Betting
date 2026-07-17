@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>No-Risk Betting</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b0e13">
@@ -219,6 +219,14 @@
       NRB.go('browse');
       setInterval(() => NRB.refreshAccount(), 30000);
     });
+    // Disable pinch/double-tap zoom on iPhone. iOS Safari ignores
+    // user-scalable=no in the browser, so also block the pinch gesture events
+    // and any multi-touch move. (Zoom is almost always accidental here.)
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach((t) =>
+      document.addEventListener(t, (e) => e.preventDefault(), { passive: false }));
+    document.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 1) e.preventDefault();
+    }, { passive: false });
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
     }
