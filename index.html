@@ -62,6 +62,26 @@
 
   <main id="view"></main>
 
+  <!-- bottom tab bar (mobile primary nav, thumb zone) -->
+  <nav class="tabbar" id="tabbar" aria-label="Primary">
+    <button class="tab" data-go="browse" aria-label="Markets">
+      <svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>
+      <span>Markets</span>
+    </button>
+    <button class="tab" data-go="portfolio" aria-label="My Bets">
+      <svg viewBox="0 0 24 24"><path d="M4 7h16v13H4z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg>
+      <span>My Bets</span>
+    </button>
+    <button class="tab" data-go="community" aria-label="Community">
+      <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6.1"/><path d="M17.5 20a5.5 5.5 0 0 0-3-4.9"/></svg>
+      <span>Community</span>
+    </button>
+    <button class="tab" data-go="profile" aria-label="Score">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg>
+      <span>Score</span>
+    </button>
+  </nav>
+
   <!-- burger drawer -->
   <div class="drawer-overlay" id="drawer-overlay"></div>
   <aside class="drawer" id="drawer">

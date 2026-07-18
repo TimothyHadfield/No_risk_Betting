@@ -157,13 +157,19 @@
     wireLike(row.querySelector(".so-like"));
     const del = row.querySelector('[data-act="del"]');
     if (del) del.addEventListener("click", async () => {
-      if (!confirm("Delete this comment?")) return;
+      const ok = await NRB.sheet.confirm({
+        title: "Delete this comment?", confirmText: "Delete", danger: true,
+      });
+      if (!ok) return;
       await NRB.api("/api/comments/" + c.id + "/delete", { method: "POST" });
       loadComments(wrap, thread);
     });
     const rep = row.querySelector('[data-act="report"]');
     if (rep) rep.addEventListener("click", async () => {
-      const reason = prompt("Report this comment — reason (optional):");
+      const reason = await NRB.sheet.text({
+        title: "Report this comment", placeholder: "Reason (optional)",
+        maxlength: 300, confirmText: "Report",
+      });
       if (reason === null) return;
       await NRB.api("/api/comments/" + c.id + "/report", { method: "POST", body: { reason } });
       NRB.toast("Reported. Thanks — we'll review it.");

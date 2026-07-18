@@ -7,6 +7,33 @@
 /* top padding clears the iPhone status bar (the global top bar is hidden here) */
 .detail-wrap { display: block; padding: calc(env(safe-area-inset-top) + 10px) 14px 0; }
 
+/* sticky bet bar — mobile only (desktop shows the full trade panel in-column) */
+.detail-betbar { display: none; }
+@media (max-width: 880px) {
+  .detail-betbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 75;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: saturate(150%) blur(14px); -webkit-backdrop-filter: saturate(150%) blur(14px);
+    border-top: 1px solid var(--border);
+  }
+  /* keep content above the fixed bet bar */
+  .detail-wrap { padding-bottom: calc(var(--betbar-h) + env(safe-area-inset-bottom) + 12px); }
+}
+.detail-betbar-info { display: flex; flex-direction: column; min-width: 0; }
+.detail-betbar-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.detail-betbar-nm {
+  font-size: 15px; font-weight: 800; letter-spacing: -.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.detail-betbar-btn {
+  margin-left: auto; flex-shrink: 0; padding: 12px 22px; font-size: 15px;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.detail-betbar-btn:disabled { opacity: .5; cursor: default; }
+#d-betbar-odds:empty { display: none; }
+
 /* big, bold, text-less back chevron */
 .detail-back {
   display: inline-flex; align-items: center; justify-content: center;

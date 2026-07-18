@@ -1,10 +1,16 @@
 /* Floating bet slip (parlays). Dark tokens from styles.css. */
 .slip-fab {
-  position: fixed; right: 18px; bottom: 20px; z-index: 70;
+  position: fixed; right: 18px; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 70;
   display: flex; align-items: center; gap: 8px;
   background: var(--accent); color: #04130c; border: none; cursor: pointer;
   font-family: var(--font); font-weight: 800; font-size: 14px;
   padding: 12px 16px; border-radius: var(--radius-pill); box-shadow: var(--shadow-lg);
+}
+/* clear the bottom tab bar (or the market bet bar) on phones */
+@media (max-width: 720px) {
+  .slip-fab { bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom)); }
+  body[data-view="detail"] .slip-fab, body[data-view="bet"] .slip-fab {
+    bottom: calc(var(--betbar-h) + 16px + env(safe-area-inset-bottom)); }
 }
 .slip-fab-ic { font-size: 16px; }
 .slip-fab-count {

@@ -257,13 +257,14 @@
     },
 
     async settleParlay(id, btn) {
-      const raw = prompt('Settle parlay — type "win" or "lose":');
-      if (raw == null) return;
-      const result = String(raw).trim().toLowerCase();
-      if (result !== "win" && result !== "lose") {
-        NRB.toast('Type "win" or "lose".');
-        return;
-      }
+      const result = await NRB.sheet.choice({
+        title: "Settle parlay", message: "Record the real outcome for this parlay.",
+        options: [
+          { label: "Won", value: "win", style: "primary" },
+          { label: "Lost", value: "lose", style: "danger" },
+        ],
+      });
+      if (result == null) return;
       if (btn) { btn.disabled = true; btn.textContent = "Settling…"; }
       try {
         const res = await NRB.api("/api/parlays/" + encodeURIComponent(id) + "/force_settle", {
@@ -439,13 +440,14 @@
     },
 
     async settle(id, btn) {
-      const raw = prompt("Settle now — type the real outcome, yes or no:");
-      if (raw == null) return;
-      const result = String(raw).trim().toLowerCase();
-      if (result !== "yes" && result !== "no") {
-        NRB.toast('Type "yes" or "no".');
-        return;
-      }
+      const result = await NRB.sheet.choice({
+        title: "Settle now", message: "Record the real outcome for this market.",
+        options: [
+          { label: "Yes", value: "yes", style: "primary" },
+          { label: "No", value: "no", style: "danger" },
+        ],
+      });
+      if (result == null) return;
       if (btn) { btn.disabled = true; btn.textContent = "Settling…"; }
       try {
         const res = await NRB.api("/api/bets/" + encodeURIComponent(id) + "/force_settle", {

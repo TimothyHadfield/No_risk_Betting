@@ -567,6 +567,116 @@
     toastTimer = setTimeout(() => t.classList.add("hidden"), ms);
   };
 
+  // ---- slide-up sheets (replace ugly window.prompt / confirm on mobile) -----
+  function buildSheet(innerHTML) {
+    const root = document.createElement("div");
+    root.className = "nrb-sheet";
+    root.innerHTML =
+      `<div class="nrb-sheet-backdrop"></div>
+       <div class="nrb-sheet-panel" role="dialog" aria-modal="true">${innerHTML}</div>`;
+    document.body.appendChild(root);
+    requestAnimationFrame(() => root.classList.add("open"));
+    return root;
+  }
+  function closeSheet(root, cb) {
+    root.classList.remove("open");
+    setTimeout(() => { try { root.remove(); } catch (e) {} if (cb) cb(); }, 240);
+  }
+  NRB.sheet = {
+    // {title, message, confirmText, cancelText, danger} -> Promise<boolean>
+    confirm(o) {
+      o = o || {};
+      return new Promise((resolve) => {
+        const root = buildSheet(
+          `<div class="nrb-sheet-title">${esc(o.title || "Are you sure?")}</div>` +
+          (o.message ? `<div class="nrb-sheet-msg">${esc(o.message)}</div>` : "") +
+          `<button class="btn btn-block ${o.danger ? "nrb-sheet-danger" : "btn-primary"}" data-a="ok">${esc(o.confirmText || "Confirm")}</button>
+           <button class="btn btn-ghost btn-block" data-a="cancel">${esc(o.cancelText || "Cancel")}</button>`);
+        const done = (v) => closeSheet(root, () => resolve(v));
+        root.querySelector('[data-a="ok"]').addEventListener("click", () => done(true));
+        root.querySelector('[data-a="cancel"]').addEventListener("click", () => done(false));
+        root.querySelector(".nrb-sheet-backdrop").addEventListener("click", () => done(false));
+      });
+    },
+    // {title, message, value, min, max, step, suffix, confirmText} -> Promise<number|null>
+    number(o) {
+      o = o || {};
+      const min = o.min != null ? o.min : 0, max = o.max != null ? o.max : 100, step = o.step || 1;
+      let val = o.value != null ? o.value : min;
+      const clamp = (v) => Math.max(min, Math.min(max, v));
+      val = clamp(val);
+      return new Promise((resolve) => {
+        const root = buildSheet(
+          `<div class="nrb-sheet-title">${esc(o.title || "")}</div>` +
+          (o.message ? `<div class="nrb-sheet-msg">${esc(o.message)}</div>` : "") +
+          `<div class="nrb-sheet-stepper">
+             <button class="nrb-step" data-d="-1" aria-label="Decrease">−</button>
+             <div class="nrb-step-val"><span id="nrb-num">${val}</span>${o.suffix ? `<span class="nrb-step-suffix">${esc(o.suffix)}</span>` : ""}</div>
+             <button class="nrb-step" data-d="1" aria-label="Increase">+</button>
+           </div>
+           <button class="btn btn-primary btn-block" data-a="ok">${esc(o.confirmText || "Set")}</button>
+           <button class="btn btn-ghost btn-block" data-a="cancel">Cancel</button>`);
+        const numEl = root.querySelector("#nrb-num");
+        root.querySelectorAll(".nrb-step").forEach((b) => b.addEventListener("click", () => {
+          val = clamp(val + step * parseInt(b.dataset.d, 10)); numEl.textContent = val;
+        }));
+        const done = (v) => closeSheet(root, () => resolve(v));
+        root.querySelector('[data-a="ok"]').addEventListener("click", () => done(val));
+        root.querySelector('[data-a="cancel"]').addEventListener("click", () => done(null));
+        root.querySelector(".nrb-sheet-backdrop").addEventListener("click", () => done(null));
+      });
+    },
+    // {title, placeholder, maxlength, confirmText} -> Promise<string|null>
+    text(o) {
+      o = o || {};
+      return new Promise((resolve) => {
+        const root = buildSheet(
+          `<div class="nrb-sheet-title">${esc(o.title || "")}</div>` +
+          `<textarea class="nrb-sheet-input" rows="3" maxlength="${o.maxlength || 500}" placeholder="${esc(o.placeholder || "")}"></textarea>
+           <button class="btn btn-primary btn-block" data-a="ok">${esc(o.confirmText || "Submit")}</button>
+           <button class="btn btn-ghost btn-block" data-a="cancel">Cancel</button>`);
+        const ta = root.querySelector(".nrb-sheet-input");
+        setTimeout(() => { try { ta.focus(); } catch (e) {} }, 280);
+        const done = (v) => closeSheet(root, () => resolve(v));
+        root.querySelector('[data-a="ok"]').addEventListener("click", () => done(ta.value));
+        root.querySelector('[data-a="cancel"]').addEventListener("click", () => done(null));
+        root.querySelector(".nrb-sheet-backdrop").addEventListener("click", () => done(null));
+      });
+    },
+    // {title, message, options:[{label, value, style}]} -> Promise<value|null>
+    choice(o) {
+      o = o || {};
+      const opts = o.options || [];
+      return new Promise((resolve) => {
+        const root = buildSheet(
+          `<div class="nrb-sheet-title">${esc(o.title || "")}</div>` +
+          (o.message ? `<div class="nrb-sheet-msg">${esc(o.message)}</div>` : "") +
+          `<div class="nrb-sheet-choices">${opts.map((op, i) =>
+            `<button class="btn btn-block ${op.style === "danger" ? "nrb-sheet-danger" : (op.style === "primary" ? "btn-primary" : "")}" data-i="${i}">${esc(op.label)}</button>`).join("")}</div>
+           <button class="btn btn-ghost btn-block" data-a="cancel">Cancel</button>`);
+        const done = (v) => closeSheet(root, () => resolve(v));
+        root.querySelectorAll("[data-i]").forEach((b) =>
+          b.addEventListener("click", () => done(opts[parseInt(b.dataset.i, 10)].value)));
+        root.querySelector('[data-a="cancel"]').addEventListener("click", () => done(null));
+        root.querySelector(".nrb-sheet-backdrop").addEventListener("click", () => done(null));
+      });
+    },
+  };
+
+  // ---- celebrate: a quick success check-mark (e.g. after placing a bet) -----
+  NRB.celebrate = function (msg) {
+    const el = document.createElement("div");
+    el.className = "nrb-celebrate";
+    el.innerHTML =
+      `<div class="nrb-celebrate-card">
+         <svg class="nrb-check" viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg>
+         <div class="nrb-celebrate-msg">${esc(msg || "Bet placed")}</div>
+       </div>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("show"));
+    setTimeout(() => { el.classList.remove("show"); setTimeout(() => { try { el.remove(); } catch (e) {} }, 300); }, 1250);
+  };
+
   // ---- views / router ------------------------------------------------------
   NRB.views = NRB.views || {};
   NRB.current = { name: null, params: null };
@@ -585,12 +695,13 @@
     Promise.resolve(view.mount(container, params || {}))
       .catch((e) => console.error("view mount error", name, e));
   };
-  // highlight the active primary nav tab
+  // highlight the active primary nav tab (top bar + bottom tab bar)
   function updateTopnav() {
     const map = { browse: "browse", watchlist: "browse",
-                  community: "community", user: "community" };
+                  community: "community", user: "community",
+                  portfolio: "portfolio", profile: "profile" };
     const active = map[NRB.current.name] || "";
-    document.querySelectorAll(".topnav-tab").forEach((t) =>
+    document.querySelectorAll(".topnav-tab, .tab").forEach((t) =>
       t.classList.toggle("active", t.dataset.go === active));
   }
   NRB.openMarket = function (ticker, side) { NRB.go("detail", { ticker, side: side || "yes" }); };
@@ -610,6 +721,11 @@
     document.documentElement.setAttribute("data-theme", t);
     const lbl = document.getElementById("theme-label");
     if (lbl) lbl.textContent = t === "light" ? "Light" : "Dark";
+    // theme-aware status bar: tint the browser UI / notch area to match the theme
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", t === "light" ? "#f6f7f9" : "#0b0e13");
+    const sb = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    if (sb) sb.setAttribute("content", t === "light" ? "default" : "black-translucent");
     try { localStorage.setItem("nrb_theme", t); } catch (e) {}
   }
   NRB.toggleTheme = function () {
@@ -865,9 +981,13 @@
   }
 
   async function resetFlow() {
-    if (!confirm("Start a new period? Your balance goes back to $1,000 and any " +
-                 "open positions are closed out. Your past bets stay saved — you " +
-                 "can still review them in your stats by switching periods.")) return;
+    const ok = await NRB.sheet.confirm({
+      title: "Start a new period?",
+      message: "Your balance goes back to $1,000 and any open positions are closed out. " +
+               "Your past bets stay saved — you can still review them in your stats by switching periods.",
+      confirmText: "Reset to $1,000", danger: true,
+    });
+    if (!ok) return;
     await NRB.api("/api/account/reset", { method: "POST", body: { starting: 1000 } });
     NRB.toast("New period started — balance reset to $1,000.");
     await NRB.refreshAccount();
@@ -883,7 +1003,7 @@
       it.addEventListener("click", () => drawerAction(it.dataset.action)));
     const brand = document.getElementById("brand");
     if (brand) brand.addEventListener("click", () => NRB.go("browse"));
-    document.querySelectorAll(".topnav-tab").forEach((t) =>
+    document.querySelectorAll(".topnav-tab, .tab").forEach((t) =>
       t.addEventListener("click", () => NRB.go(t.dataset.go)));
 
     // auth modal wiring

@@ -336,6 +336,17 @@
           </div>
         </div>
 
+        <!-- sticky bet bar (mobile): selection + odds + one-tap to the bet page -->
+        <div class="detail-betbar" id="d-betbar">
+          <div class="detail-betbar-info">
+            <span class="detail-betbar-lbl muted">Betting</span>
+            <span class="detail-betbar-nm" id="d-betbar-nm">—</span>
+          </div>
+          <button class="btn btn-primary detail-betbar-btn" id="d-betbar-go">
+            <span class="tnum" id="d-betbar-odds"></span><span>Bet</span>
+          </button>
+        </div>
+
         <!-- slide-up live-chat sheet (discussion) -->
         <div class="chat-sheet" id="d-chat-sheet" aria-hidden="true">
           <div class="chat-sheet-backdrop" id="d-chat-backdrop"></div>
@@ -368,6 +379,33 @@
     renderFav();
     renderMatchup();
     renderVol();
+    renderBetbar();
+  }
+
+  // sticky bottom bet bar: shows the current selection + its multiplier and
+  // routes to the dedicated bet page. Disabled if the selection is eliminated.
+  function renderBetbar() {
+    const nmEl = document.getElementById("d-betbar-nm");
+    if (!nmEl) return;
+    const oddsEl = document.getElementById("d-betbar-odds");
+    const goBtn = document.getElementById("d-betbar-go");
+    const o = S.multi ? selectedOutcome() : null;
+    const eliminated = !!(o && o.eliminated);
+    nmEl.textContent = selectedName() || "Pick an outcome";
+    const price = selectedPrice();
+    if (oddsEl) oddsEl.textContent = (price && price > 0 && !eliminated) ? odds.multStr(price) : "";
+    if (goBtn) goBtn.disabled = eliminated || !(price && price > 0);
+  }
+
+  function goToBetFromSelection() {
+    const price = selectedPrice();
+    if (price == null || price <= 0) { NRB.toast("No price for this pick right now."); return; }
+    NRB.go("bet", {
+      ticker: S.ticker, side: S.side, price,
+      name: selectedName(),
+      title: (S.meta && S.meta.event_title) || (S.market && S.market.title) || S.ticker,
+      eventTicker: eventTicker(), returnTicker: S.ticker,
+    });
   }
 
   function renderFav() {
@@ -1317,6 +1355,7 @@
           : (res.quote && res.quote.max_payout != null) ? res.quote.max_payout
           : (est ? est.payout : null);
         const winTxt = payout != null ? ` to win ${fmt.usd(payout)}` : "";
+        if (NRB.celebrate) NRB.celebrate(`${fmt.usd(wager)} on ${label}`);
         NRB.toast(`Bet placed: ${fmt.usd(wager)} on ${label}${winTxt}`);
         await NRB.refreshAccount();
         await refreshMarket();   // refresh prices / spot after the fill
@@ -1879,6 +1918,10 @@
       cv.addEventListener("mouseleave", scrubEnd);
     }
 
+    // sticky bet bar -> dedicated bet page for the current selection
+    const betbarGo = document.getElementById("d-betbar-go");
+    if (betbarGo) betbarGo.addEventListener("click", goToBetFromSelection);
+
     // live-chat slide-up sheet
     const chatBtn = document.getElementById("d-chat");
     if (chatBtn) chatBtn.addEventListener("click", openChat);
@@ -1918,12 +1961,16 @@
   // create a one-shot price alert for the selected outcome at a target chance
   async function setAlert() {
     const name = selectedName() || (S.market && S.market.title) || S.ticker;
-    const raw = prompt('Notify me when "' + name + '" reaches what chance? (1–99%)');
-    if (raw == null) return;
-    const pct = parseFloat(String(raw).replace("%", "").trim());
-    if (isNaN(pct) || pct <= 0 || pct >= 100) {
-      NRB.toast("Enter a percentage between 1 and 99."); return;
-    }
+    // default the picker to the current chance (nudged so it's a real target)
+    let cur = S.multi ? (selectedOutcome() && selectedOutcome().chance) : yesSpot(S.market);
+    let start = Math.round((cur != null ? cur : 0.5) * 100);
+    start = Math.max(1, Math.min(99, start));
+    const pct = await NRB.sheet.number({
+      title: "Set a price alert",
+      message: 'Notify me when "' + name + '" reaches:',
+      value: start, min: 1, max: 99, step: 1, suffix: "%", confirmText: "Set alert",
+    });
+    if (pct == null) return;
     try {
       const r = await NRB.api("/api/alerts", { method: "POST", body: {
         ticker: S.ticker, side: S.side, outcome_name: name,

@@ -198,6 +198,7 @@
         const payout = (res.bet && res.bet.max_payout != null) ? res.bet.max_payout
           : (res.quote && res.quote.max_payout != null) ? res.quote.max_payout : null;
         const winTxt = payout != null ? ` to win ${fmt.usd(payout)}` : "";
+        if (NRB.celebrate) NRB.celebrate(`${fmt.usd(wager)} on ${S.name}`);
         NRB.toast(`Bet placed: ${fmt.usd(wager)} on ${S.name}${winTxt}`);
         await NRB.refreshAccount();
         NRB.openMarket(S.returnTicker);   // back to the market we came from
