@@ -31,7 +31,7 @@
   border-radius: var(--radius-pill); text-transform: uppercase; letter-spacing: .04em;
   border: 1px solid transparent;
 }
-.prof-tag-sharp { background: var(--yes-soft); color: var(--yes); border-color: rgba(39,209,139,.3); }
+.prof-tag-sharp { background: var(--yes-soft); color: var(--yes); border-color: rgba(16,185,129,.3); }
 .prof-tag-decent { background: rgba(231,184,80,.14); color: var(--gold); border-color: rgba(231,184,80,.3); }
 .prof-tag-weak { background: var(--no-soft); color: var(--no); border-color: rgba(251,90,106,.3); }
 
@@ -96,7 +96,7 @@
 /* ---------- skill by category ---------- */
 .prof-best-banner {
   font-size: 13px; font-weight: 600; color: var(--text);
-  background: var(--yes-soft); border: 1px solid rgba(39,209,139,.25);
+  background: var(--yes-soft); border: 1px solid rgba(16,185,129,.25);
   border-radius: var(--radius-sm); padding: 9px 13px; margin-bottom: 10px;
 }
 .prof-best-banner strong { color: var(--accent); }

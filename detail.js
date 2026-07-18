@@ -21,7 +21,7 @@
   let S = null;
 
   // distinct line colors for multi-outcome charts (top 6 by chance)
-  const LINE_COLORS = ["#27d18b", "#4aa3ff", "#e7b850", "#b07cff", "#fb5a6a", "#2dd4bf"];
+  const LINE_COLORS = ["#10b981", "#4aa3ff", "#e6b53f", "#b07cff", "#f0475b", "#2dd4bf"];
 
   function blankState() {
     return {
@@ -140,7 +140,7 @@
       const s = S.series.find((x) => x.ticker === bet.ticker);
       if (s) return s.color;
     }
-    return bet.side === "no" ? "#fb5a6a" : "#27d18b";
+    return bet.side === "no" ? "#f0475b" : "#10b981";
   }
 
   // ---- price helpers -------------------------------------------------------
@@ -534,7 +534,7 @@
               <span class="detail-tip-nm">${fmt.esc(raw._label || "Your entry")}</span>
             </div>`;
         }
-        const color = dp.dataset.borderColor || "#27d18b";
+        const color = dp.dataset.borderColor || "#10b981";
         const name = dp.dataset.label || "";
         const pct = Math.round(dp.parsed.y);
         return `<div class="detail-tip-row">
@@ -822,8 +822,8 @@
     } else {
       // vertical gradient fill under the YES line, mint -> transparent
       const grad = ctx.createLinearGradient(0, 0, 0, canvas.offsetHeight || 300);
-      grad.addColorStop(0, "rgba(39,209,139,0.28)");
-      grad.addColorStop(1, "rgba(39,209,139,0.00)");
+      grad.addColorStop(0, "rgba(16,185,129,0.26)");
+      grad.addColorStop(1, "rgba(16,185,129,0.00)");
       const yesData = S.points.map((pt) => ({ x: pt.t * 1000, y: pt.p * 100 }));
       const noData = S.points.map((pt) => ({ x: pt.t * 1000, y: 100 - pt.p * 100 }));
       datasets = [
@@ -831,7 +831,7 @@
           label: yesOutcomeName(),
           _abbr: outcomeAbbr(yesOutcomeName()),
           data: yesData,
-          borderColor: "#27d18b",
+          borderColor: "#10b981",
           borderWidth: 2,
           backgroundColor: grad,
           fill: true,
@@ -843,7 +843,7 @@
           label: "No",
           _abbr: "NO",
           data: noData,
-          borderColor: "#fb5a6a",
+          borderColor: "#f0475b",
           borderWidth: 2,
           backgroundColor: "transparent",
           fill: false,

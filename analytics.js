@@ -8,9 +8,9 @@
   const { fmt } = NRB;
 
   // dark theme constants (mirrors styles.css tokens)
-  const C_MINT = "#27d18b"; // --accent
-  const C_UP = "#27d18b";   // --up
-  const C_DOWN = "#fb5a6a"; // --down
+  const C_MINT = "#10b981"; // --accent
+  const C_UP = "#10b981";   // --up
+  const C_DOWN = "#f0475b"; // --down
   const C_GRID = "#232b38"; // --border
   const C_TICK = "#8b95a6"; // --muted
   const FONT = '"Inter", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
@@ -130,7 +130,7 @@
             {
               label: "Your buckets",
               data: pts,
-              backgroundColor: "rgba(39,209,139,.55)",
+              backgroundColor: "rgba(16,185,129,.55)",
               borderColor: C_MINT,
               borderWidth: 1.5,
               pointRadius: (ctx) => (ctx.raw && ctx.raw.r) || 5,
@@ -181,8 +181,8 @@
 
       const ctx = cv.getContext("2d");
       const grad = ctx.createLinearGradient(0, 0, 0, 260);
-      grad.addColorStop(0, "rgba(39,209,139,.22)");
-      grad.addColorStop(1, "rgba(39,209,139,0)");
+      grad.addColorStop(0, "rgba(16,185,129,.22)");
+      grad.addColorStop(1, "rgba(16,185,129,0)");
 
       this._eqChart = new Chart(ctx, {
         type: "line",

@@ -92,7 +92,7 @@
 .so-streak { display: flex; align-items: center; gap: 5px; margin-top: 14px; }
 .so-pip { width: 20px; height: 20px; border-radius: 5px; font-size: 11px; font-weight: 700;
   display: inline-flex; align-items: center; justify-content: center; color: #fff; }
-.so-pip.win { background: var(--yes, #27d18b); color: #04130c; }
+.so-pip.win { background: var(--yes, #10b981); color: #04130c; }
 .so-pip.loss { background: var(--no, #e5484d); color: #2a0508; }
 .so-empty-card { padding: 22px; text-align: center; }
 
