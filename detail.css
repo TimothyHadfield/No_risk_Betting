@@ -98,6 +98,18 @@
 /* ---- chart card ---- */
 .detail-chart-card { padding: 12px 14px 12px; }
 
+/* On phones the graph is boxless and full-bleed: the lines run from the left
+   screen edge across ~80% (the right 20% holds the end-of-line value labels,
+   drawn inside the canvas). Only the graph bleeds; the pill/footer stay padded. */
+@media (max-width: 720px) {
+  .detail-chart-card {
+    background: none; border: none; box-shadow: none; border-radius: 0;
+    padding: 0; margin-left: -14px; margin-right: -14px;
+  }
+  .detail-chart-card .detail-chat-btn { margin-left: 14px; }
+  .detail-chart-card .detail-chart-foot { padding: 0 14px; }
+}
+
 /* "live chat" pill (opens the discussion sheet), pinned top-left above the graph */
 .detail-chat-btn {
   display: inline-flex; align-items: center; gap: 6px;

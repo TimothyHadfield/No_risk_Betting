@@ -581,6 +581,151 @@
     return 100;
   }
 
+  const CHART_FONT = 'Inter, system-ui, "Segoe UI", sans-serif';
+  const GUTTER_FRAC = 0.20;   // right 20% of the chart is reserved for end labels
+
+  // short uppercase abbreviation for an outcome, for the end-of-line labels
+  // e.g. "Argentina" -> "ARG", "Los Angeles Lakers" -> "LAL", "No" -> "NO"
+  function outcomeAbbr(name) {
+    const n = String(name || "").trim();
+    if (!n) return "";
+    if (n.length <= 4) return n.toUpperCase();
+    const words = n.split(/\s+/).filter(Boolean);
+    if (words.length > 1) return words.slice(0, 3).map((w) => w[0]).join("").toUpperCase();
+    return n.slice(0, 3).toUpperCase();
+  }
+
+  // nearest aligned-data index for a canvas-x pixel (for touch scrubbing)
+  function indexForPixel(chart, px) {
+    const ds = chart.data.datasets.find((d) => !d._isMarkers && (d.data || []).length);
+    if (!ds) return -1;
+    const xVal = chart.scales.x.getValueForPixel(px);
+    let best = 0, bestD = Infinity;
+    ds.data.forEach((pt, i) => {
+      const d = Math.abs(pt.x - xVal);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return best;
+  }
+
+  // Custom overlay drawn on top of the lines:
+  //  * ALWAYS: an end-of-line label per outcome (abbreviation over the %) in the
+  //    right gutter, at the value of the active index.
+  //  * WHILE TOUCHING (chart.$nrb.touching): a light dotted vertical scrub line at
+  //    the touched point, a dot on each line, the date/time near the top, and the
+  //    labels track the touched value. Default (not touching) = latest point ("now").
+  const chartOverlay = {
+    id: "nrbOverlay",
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx, chartArea = chart.chartArea, scales = chart.scales;
+      if (!chartArea) return;
+      const lines = [];
+      chart.data.datasets.forEach((ds, di) => {
+        if (ds._isMarkers || !(ds.data || []).length) return;
+        if (chart.getDatasetMeta(di).hidden) return;
+        lines.push({ ds, di });
+      });
+      if (!lines.length) return;
+
+      const len = lines[0].ds.data.length;
+      const st = chart.$nrb || {};
+      const touching = !!st.touching;
+      let idx = (touching && st.idx != null) ? st.idx : (len - 1);
+      idx = Math.max(0, Math.min(idx, len - 1));
+
+      // one label per line at the active index
+      const labels = [];
+      lines.forEach(({ ds }) => {
+        const pt = ds.data[idx];
+        if (!pt || pt.y == null) return;
+        labels.push({
+          y: scales.y.getPixelForValue(pt.y),
+          color: ds.borderColor || "#8b95a6",
+          abbr: ds._abbr || "",
+          pct: Math.round(pt.y) + "%",
+        });
+      });
+      // de-collide vertically, then clamp inside the plot
+      labels.sort((a, b) => a.y - b.y);
+      const MINH = 30;
+      for (let i = 1; i < labels.length; i++)
+        if (labels[i].y - labels[i - 1].y < MINH) labels[i].y = labels[i - 1].y + MINH;
+      const topLim = chartArea.top + 13, botLim = chartArea.bottom - 8;
+      for (let i = labels.length - 1; i >= 0; i--) {
+        if (labels[i].y > botLim) labels[i].y = botLim;
+        if (i < labels.length - 1 && labels[i + 1].y - labels[i].y < MINH)
+          labels[i].y = labels[i + 1].y - MINH;
+        if (labels[i].y < topLim) labels[i].y = topLim;
+      }
+
+      const lx = chartArea.right + 8;
+      ctx.save();
+      ctx.textAlign = "left";
+      labels.forEach((l) => {
+        ctx.fillStyle = l.color;
+        ctx.textBaseline = "alphabetic";
+        ctx.font = "700 10px " + CHART_FONT;
+        ctx.fillText(l.abbr, lx, l.y - 3);
+        ctx.font = "800 13px " + CHART_FONT;
+        ctx.fillText(l.pct, lx, l.y + 12);
+      });
+      ctx.restore();
+
+      if (!touching) return;
+
+      // scrub visuals: dotted line + dots + a date/time label near the top
+      const refPt = lines[0].ds.data[idx];
+      const px = scales.x.getPixelForValue(refPt.x);
+      ctx.save();
+      ctx.setLineDash([3, 4]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(139,149,166,0.75)";
+      ctx.beginPath();
+      ctx.moveTo(px, chartArea.top);
+      ctx.lineTo(px, chartArea.bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      lines.forEach(({ ds }) => {
+        const pt = ds.data[idx];
+        if (!pt || pt.y == null) return;
+        ctx.beginPath();
+        ctx.fillStyle = ds.borderColor || "#8b95a6";
+        ctx.arc(px, scales.y.getPixelForValue(pt.y), 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      const t = fmtTipTime(refPt.x);
+      if (t) {
+        ctx.font = "600 11px " + CHART_FONT;
+        const tw = ctx.measureText(t).width;
+        let tx = Math.max(chartArea.left, Math.min(px - tw / 2, chartArea.right - tw));
+        const ty = chartArea.top - 9;
+        ctx.fillStyle = "rgba(20,24,31,0.9)";
+        ctx.fillRect(tx - 5, ty - 1, tw + 10, 15);
+        ctx.fillStyle = "#c7cfdb";
+        ctx.textBaseline = "top";
+        ctx.fillText(t, tx, ty + 1);
+      }
+      ctx.restore();
+    },
+  };
+
+  // scrub handlers (attached once to the canvas in wire(); read the live S.chart)
+  function scrubAt(clientX) {
+    if (!S || !S.chart) return;
+    const cv = document.getElementById("d-chart");
+    if (!cv) return;
+    const px = clientX - cv.getBoundingClientRect().left;
+    const idx = indexForPixel(S.chart, px);
+    if (idx < 0) return;
+    S.chart.$nrb = { touching: true, idx };
+    S.chart.render();
+  }
+  function scrubEnd() {
+    if (!S || !S.chart) return;
+    S.chart.$nrb = { touching: false, idx: -1 };
+    S.chart.render();
+  }
+
   function buildChart() {
     const canvas = document.getElementById("d-chart");
     const emptyEl = document.getElementById("d-chart-empty");
@@ -626,6 +771,7 @@
 
       datasets = S.series.map((s) => ({
         label: s.name,
+        _abbr: outcomeAbbr(s.name),
         data: aligned(s),
         borderColor: s.color,
         borderWidth: 2,
@@ -633,10 +779,7 @@
         fill: false,
         tension: 0.25,
         pointRadius: 0,
-        pointHoverRadius: 4,
-        pointHoverBackgroundColor: s.color,
-        pointHoverBorderColor: "#0b0e13",
-        pointHoverBorderWidth: 2,
+        pointHoverRadius: 0,
       }));
     } else {
       // vertical gradient fill under the YES line, mint -> transparent
@@ -648,6 +791,7 @@
       datasets = [
         {
           label: yesOutcomeName(),
+          _abbr: outcomeAbbr(yesOutcomeName()),
           data: yesData,
           borderColor: "#27d18b",
           borderWidth: 2,
@@ -655,13 +799,11 @@
           fill: true,
           tension: 0.25,
           pointRadius: 0,
-          pointHoverRadius: 4,
-          pointHoverBackgroundColor: "#27d18b",
-          pointHoverBorderColor: "#0b0e13",
-          pointHoverBorderWidth: 2,
+          pointHoverRadius: 0,
         },
         {
           label: "No",
+          _abbr: "NO",
           data: noData,
           borderColor: "#fb5a6a",
           borderWidth: 2,
@@ -669,10 +811,7 @@
           fill: false,
           tension: 0.25,
           pointRadius: 0,
-          pointHoverRadius: 4,
-          pointHoverBackgroundColor: "#fb5a6a",
-          pointHoverBorderColor: "#0b0e13",
-          pointHoverBorderWidth: 2,
+          pointHoverRadius: 0,
         },
       ];
     }
@@ -702,18 +841,23 @@
     }));
     const yMax = niceChartTop(peak);
 
+    // reserve the right ~20% of the chart width for the end-of-line labels, and
+    // no left padding so the lines start at the very left edge of the screen
+    const boxW = (canvas.parentElement && canvas.parentElement.clientWidth) || 320;
+    const gutterPx = Math.max(52, Math.round(boxW * GUTTER_FRAC));
+
     S.chart = new Chart(ctx, {
       type: "line",
       data: { datasets },
+      plugins: [chartOverlay],
       options: {
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 300 },
-        interaction: { mode: "index", intersect: false, axis: "x" },
-        layout: { padding: { top: 6, right: 6, bottom: 0, left: 6 } },
-        // Clean, chrome-free chart: NO axes, NO gridlines, NO tick labels.
-        // The only way to read a time/date or value is to touch the chart, which
-        // shows the scrub line + the HTML tooltip.
+        events: [],                // we drive scrubbing via our own touch handlers
+        layout: { padding: { top: 12, right: gutterPx, bottom: 6, left: 0 } },
+        // Clean, chrome-free chart: NO axes, NO gridlines, NO tick labels, NO box.
+        // Per-outcome value labels live in the right gutter; touch to scrub.
         scales: {
           x: {
             type: "linear",
@@ -732,18 +876,7 @@
         },
         plugins: {
           legend: { display: false },
-          tooltip: {
-            enabled: false,            // use an HTML external tooltip (never clipped)
-            mode: "index",
-            intersect: false,
-            axis: "x",                 // pair all datasets at one timestamp (aligned x)
-            position: "nearest",
-            external: externalTooltip,
-            callbacks: {
-              // ALWAYS show the date/time, never the raw epoch-ms number
-              title: (items) => fmtTipTime(items && items[0] && items[0].parsed && items[0].parsed.x),
-            },
-          },
+          tooltip: { enabled: false },
         },
       },
     });
@@ -1733,6 +1866,18 @@
     if (addSlipBtn) addSlipBtn.addEventListener("click", addToSlip);
     const alertBtn = document.getElementById("d-alert");
     if (alertBtn) alertBtn.addEventListener("click", setAlert);
+
+    // touch/drag to scrub the chart (drives the dotted line + value labels).
+    // Attached once here; the handlers read the live S.chart on each rebuild.
+    const cv = document.getElementById("d-chart");
+    if (cv) {
+      cv.addEventListener("touchstart", (e) => { if (e.touches[0]) scrubAt(e.touches[0].clientX); }, { passive: true });
+      cv.addEventListener("touchmove", (e) => { if (e.touches[0]) scrubAt(e.touches[0].clientX); }, { passive: true });
+      cv.addEventListener("touchend", scrubEnd);
+      cv.addEventListener("touchcancel", scrubEnd);
+      cv.addEventListener("mousemove", (e) => scrubAt(e.clientX));
+      cv.addEventListener("mouseleave", scrubEnd);
+    }
 
     // live-chat slide-up sheet
     const chatBtn = document.getElementById("d-chat");
