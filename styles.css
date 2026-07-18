@@ -67,7 +67,14 @@
 :root[data-theme="light"] .btn-primary { color: #fff; }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
+/* Lock the page horizontally — no sideways drag/scroll or swipe-navigation.
+   `overflow-x: clip` (unlike `hidden`) doesn't create a scroll container, so the
+   sticky top bar and inner horizontal carousels keep working; overscroll-behavior
+   kills the iOS rubber-band swipe. */
+html, body {
+  margin: 0; padding: 0; width: 100%; max-width: 100%;
+  overflow-x: clip; overscroll-behavior-x: none;
+}
 body {
   background: var(--bg); color: var(--text);
   font-family: var(--font); font-size: 15px; line-height: 1.5;
