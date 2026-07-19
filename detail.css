@@ -188,6 +188,20 @@
 .detail-tip-nm { flex: 1; }
 .detail-tip-pct { margin-left: 12px; }
 
+/* ---- "how this market resolves" disclosure ---- */
+.detail-resolve { border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-elev); box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.02); }
+.detail-resolve.hidden { display: none; }
+.detail-resolve-head { width: 100%; display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; background: none; border: none; cursor: pointer; color: var(--text);
+  padding: 14px 16px; font-family: var(--font); }
+.detail-resolve-title { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
+.detail-resolve-chev { color: var(--muted); font-size: 13px; }
+.detail-resolve-body { padding: 0 16px 15px; }
+.detail-resolve-body.hidden { display: none; }
+.detail-resolve-rules { margin: 0 0 10px; font-size: 13.5px; line-height: 1.55; color: var(--muted); }
+.detail-resolve-src { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+
 /* ---- shared card title ---- */
 .detail-card-title {
   font-size: 12px; font-weight: 700; text-transform: uppercase;

@@ -298,6 +298,9 @@
 
             <!-- spread / total betting lines (game events only) -->
             <div class="detail-lines" id="d-lines"></div>
+
+            <!-- "how this market resolves" disclosure (hidden if no rules) -->
+            <div class="detail-resolve hidden" id="d-resolve"></div>
           </div>
 
           <!-- trade panel -->
@@ -414,6 +417,38 @@
     const on = NRB.fav.has(eventTicker());
     btn.classList.toggle("on", on);
     btn.textContent = on ? "★" : "☆";
+  }
+
+  // "How this market resolves" disclosure — the plain-language resolution
+  // criteria from Kalshi + the data source (a trust/education pattern; on-mission).
+  // Rendered once on mount so live polling never collapses it mid-read.
+  function renderResolve() {
+    const host = document.getElementById("d-resolve");
+    if (!host) return;
+    const rules = ((S.market && S.market.rules_primary) || "").trim();
+    if (!rules) { host.classList.add("hidden"); host.innerHTML = ""; return; }
+    const source = isGameEvent()
+      ? "Odds from Kalshi · live scores from ESPN"
+      : "Odds from Kalshi";
+    host.classList.remove("hidden");
+    host.innerHTML = `
+      <button class="detail-resolve-head" id="d-resolve-toggle" type="button" aria-expanded="false">
+        <span class="detail-resolve-title">How this market resolves</span>
+        <span class="detail-resolve-chev" aria-hidden="true">▾</span>
+      </button>
+      <div class="detail-resolve-body hidden" id="d-resolve-body">
+        <p class="detail-resolve-rules">${fmt.esc(rules)}</p>
+        <div class="detail-resolve-src muted">${fmt.esc(source)}</div>
+      </div>`;
+    const btn = host.querySelector("#d-resolve-toggle");
+    const body = host.querySelector("#d-resolve-body");
+    btn.addEventListener("click", () => {
+      const nowHidden = body.classList.toggle("hidden");
+      btn.setAttribute("aria-expanded", String(!nowHidden));
+      host.classList.toggle("open", !nowHidden);
+      const chev = btn.querySelector(".detail-resolve-chev");
+      if (chev) chev.textContent = nowHidden ? "▾" : "▴";
+    });
   }
 
   // small "$<vol> vol" tucked into the bottom-left of the chart
@@ -2051,6 +2086,7 @@
       wire();
       renderSideToggle();
       renderHead();
+      renderResolve();  // "how this resolves" (once; polling won't collapse it)
       renderToWin();   // instant payout readout before the first quote returns
       resetForecast(); // collapsed forecast affordance (only if predict enabled)
 

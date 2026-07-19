@@ -488,9 +488,9 @@
       const s = await NRB.api("/api/summary");      // light: balance + live equity
       NRB.state.account = { balance: s.balance, starting: s.starting };
       const bal = document.getElementById("hdr-balance");
-      if (bal) bal.textContent = NRB.fmt.usd(s.balance);
+      if (bal) NRB.animateCount(bal, s.balance, NRB.fmt.usd);
       const eqEl = document.getElementById("hdr-equity");
-      if (eqEl) eqEl.textContent = NRB.fmt.usd(s.equity != null ? s.equity : s.balance);
+      if (eqEl) NRB.animateCount(eqEl, (s.equity != null ? s.equity : s.balance), NRB.fmt.usd);
       setNavBadge(s.unread);
       acctSubs.forEach((cb) => { try { cb(NRB.state.account); } catch (e) {} });
     } catch (e) { /* connection banner already shown by NRB.api */ }
@@ -661,6 +661,31 @@
         root.querySelector(".nrb-sheet-backdrop").addEventListener("click", () => done(null));
       });
     },
+  };
+
+  // ---- animated number count-up (subtle motion on changing values) ---------
+  // Interpolates el's value from its previous value to `to`, formatting each
+  // frame with `format`. First call just seeds the baseline (no animation); only
+  // real changes animate. Respects prefers-reduced-motion.
+  const _reduceMotion = (() => {
+    try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
+    catch (e) { return false; }
+  })();
+  NRB.animateCount = function (el, to, format, dur) {
+    if (!el || to == null || isNaN(to)) return;
+    format = format || ((v) => String(Math.round(v)));
+    dur = dur || 520;
+    const from = (el.__nrbVal != null) ? el.__nrbVal : to;
+    el.__nrbVal = to;
+    if (_reduceMotion || from === to) { el.textContent = format(to); return; }
+    const start = performance.now();
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / dur);
+      const e = 1 - Math.pow(1 - t, 3);   // easeOutCubic
+      el.textContent = format(from + (to - from) * e);
+      if (t < 1) requestAnimationFrame(tick); else el.textContent = format(to);
+    };
+    requestAnimationFrame(tick);
   };
 
   // ---- celebrate: a quick success check-mark (e.g. after placing a bet) -----

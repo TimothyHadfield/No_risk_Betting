@@ -121,6 +121,10 @@ def normalize_market(m):
         "can_close_early": m.get("can_close_early", False),
         "is_provisional": m.get("is_provisional", False),
         "mve": bool(m.get("mve_collection_ticker")),
+        # plain-language resolution criteria (shown in the "How this resolves"
+        # disclosure on the detail page). Present on single-market GETs; truncated
+        # to bound cache memory. Empty for markets where Kalshi omits it.
+        "rules_primary": (m.get("rules_primary") or "")[:700],
     }
 
 
