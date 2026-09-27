@@ -2,7 +2,7 @@
 
 All the thrill of a betting app with none of the money: bet a virtual $1,000 on **real, live Kalshi odds** — sports, politics, economics and more — and find out whether your predictions are actually right.
 
-Works on phone and laptop. A personal project: not publicly launched yet.
+**[▶ Open the live app](https://no-risk-betting.onrender.com)** · works on phone and laptop (free server: the first visit can take up to a minute to wake up)
 
 <p align="center">
   <img src="docs/screenshots/desktop-markets.png" alt="Market browser with live odds for NFL, politics and Premier League markets" width="68%">
