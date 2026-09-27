@@ -1,5 +1,35 @@
 # No-Risk Betting
 
+All the thrill of a betting app with none of the money: bet a virtual $1,000 on **real, live Kalshi odds** — sports, politics, economics and more — and find out whether your predictions are actually right.
+
+**[▶ Open the live app](https://no-risk-betting.onrender.com)** · works on phone and laptop (free server — the first visit can take up to a minute to wake up)
+
+<p align="center">
+  <img src="docs/screenshots/desktop-markets.png" alt="Market browser with live odds for NFL, politics and Premier League markets" width="68%">
+  &nbsp;
+  <img src="docs/screenshots/phone-bet-slip.png" alt="A three-leg parlay in the bet slip on a phone" width="24%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/desktop-market-detail.png" alt="Market page with a live price chart, outcome list and paper-bet panel" width="68%">
+  &nbsp;
+  <img src="docs/screenshots/phone-markets.png" alt="Market browser on a phone with the bottom tab bar" width="24%">
+</p>
+
+## Features
+- **Real odds, fake money** — live prices from Kalshi's production markets and a virtual $1,000 balance; nothing real is ever wagered
+- **Honest fills** — bets walk the live order book and pay Kalshi's fee, so results match what real money would have done
+- **Parlays and a bet slip** — tap **+** on any outcome to build multi-leg parlays with the combined payout shown
+- **Forecasting Score** — Brier score, log-loss and a calibration curve that measure whether you're right, not just lucky
+- **Market pages** — price-history charts, "how this market resolves" rules, live game scores and an optional predict-before-you-bet step
+- **Community** — optional accounts, leaderboard, public bet feed and per-market chat
+- **Seasons and alerts** — reset into a new season without losing past stats, and get notified when a price moves
+- **Built for phones** — installable app with a bottom tab bar, light/dark themes and an "Our Purpose" page on the real harms of sports betting
+
+## Built with
+Python (standard-library HTTP server) with SQLite locally or Postgres (Neon) in production, plain HTML/CSS/JavaScript front end, hosted on Render.
+
+## For developers
+
 A **local, personal** paper-trading tool for prediction markets. It shows the
 **real, live odds from Kalshi** and lets you place **fake** bets with a virtual
 balance — so you can follow markets and test your forecasting *without risking a
@@ -63,4 +93,4 @@ advice, and not affiliated with Kalshi.
 | `fills.py` | Order-book-walk fill simulation + Kalshi fee model |
 | `analytics.py` | Brier / log-loss / calibration |
 | `db.py` | SQLite persistence (virtual balance, bets, equity history) |
-| `index.html` / `app.js` / `styles.css` | Single-page frontend |
+| `index.html` / `util.js` / `browse.js` / `detail.js` / `*.css` … | Single-page frontend (one JS/CSS pair per view) |
