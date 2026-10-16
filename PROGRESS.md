@@ -44,7 +44,7 @@ _Measured 2026-09-21: branch `main` clean and even with `origin/main`. Last code
 - Kalshi data-license blocker: the old notes said "Keep reminding him of this — it's the gating item, not any code." Tim has NOT accepted this risk, so raise it when public launch or promotion comes up, not in every reply.
 - Explain Git/hosting steps simply when Tim has to do them himself.
 - "Always test new endpoints live after deploy."
-- Bump `CACHE` in `sw.js` on every shell change, and add any new JS/CSS file to its `SHELL` list. (Currently `nrb-shell-v41`.)
+- Bump `CACHE` in `sw.js` on every shell change, and add any new JS/CSS file to its `SHELL` list. (Currently `nrb-shell-v42`.)
 - Vocabulary: he often says "do all of the above" or "pick the next N and do them autonomously".
 
 ## Traps / rules that bite
@@ -95,6 +95,7 @@ _Measured 2026-09-21: branch `main` clean and even with `origin/main`. Last code
 - D25 · 2026-07-17 · Visual identity: emerald `#10b981`, red `#f0475b`, Space Grotesk headings, Inter body, and a refined chart-square mark. It's kept distinct from Kalshi's mint on purpose.
 - D26 · 2026-07-19 · Borrow from Kalshi only harm-aware, on-mission patterns (clarity, trust, education). "Better" never means "more addictive". Keep P&L framing calm and put accuracy/skill in the foreground.
 - D27 · 2026-07-19 · The bottom nav is hidden on the immersive detail/bet views on purpose. It's not a bug.
+- 2026-10-16 · Bug sweep (branch `claude/sweep-1016`, SW v41→v42): Kalshi fee no longer overcharges 1¢ on exact-cent fees (float noise; 189 of 49,500 cases); settle/sell/force-settle now close only still-open bets and credit in one transaction (concurrent requests had paid the same bet 2-3×); slip stake input keeps focus while typing; Score/Analytics period picker no longer throws "Canvas is already in use" and the Score page hides stale data on an empty period. Added `CLAUDE.md`. Report: laptop-ops `coding-and-claude/reports/sweep-2026-10-16/No_risk_Betting.md`.
 
 ## NOT verified
 - The 2026-07-17 mobile pass and the 2026-07-19 borrows on a real iPhone at 390px. The commits record no device or screenshot check · needs phone or `phone-view.mjs`.
