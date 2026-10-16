@@ -112,6 +112,8 @@
           r: Math.max(4, Math.min(20, 4 + Math.sqrt(b.n) * 2.5)),
         }));
 
+      // season switch re-renders on the same canvas: drop the old chart first
+      if (this._calChart) { this._calChart.destroy(); this._calChart = null; }
       this._calChart = new Chart(cv.getContext("2d"), {
         type: "scatter",
         data: {
@@ -179,6 +181,7 @@
       const labels = history.map((p) => new Date(p.ts * 1000).toLocaleTimeString());
       const values = history.map((p) => p.equity);
 
+      if (this._eqChart) { this._eqChart.destroy(); this._eqChart = null; }
       const ctx = cv.getContext("2d");
       const grad = ctx.createLinearGradient(0, 0, 0, 260);
       grad.addColorStop(0, "rgba(16,185,129,.22)");

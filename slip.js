@@ -78,7 +78,14 @@
     wrap.querySelectorAll(".slip-leg-x").forEach((b) =>
       b.addEventListener("click", () => NRB.slip.remove(b.dataset.t)));
     const si = foot.querySelector("#slip-stake");
-    si.addEventListener("input", () => { stake = Math.max(0, Number(si.value) || 0); render(); });
+    // update only the payout text in place: re-rendering would replace the
+    // input and drop focus (closing the iPhone keyboard) after every keystroke
+    si.addEventListener("input", () => {
+      stake = Math.max(0, Number(si.value) || 0);
+      const p = fmt().usd(stake * NRB.slip.combinedMult());
+      foot.querySelector(".slip-row.big .tnum").textContent = p;
+      foot.querySelector("#slip-place").textContent = `Place parlay · win ${p}`;
+    });
     foot.querySelector("#slip-clear").addEventListener("click", () => { NRB.slip.clear(); });
     foot.querySelector("#slip-place").addEventListener("click", place);
   }

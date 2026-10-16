@@ -124,10 +124,13 @@
 
       this.renderHero(a);
 
-      // Empty state: nothing scored yet → hero shows the CTA, hide the rest.
-      if (!a.n_scored) return;
+      // season switch re-renders on the same canvases: drop the old charts first
+      this.destroyCharts();
 
+      // Empty state: nothing scored yet → hero shows the CTA, hide the rest.
       const body = document.getElementById("prof-body");
+      if (!a.n_scored) { if (body) body.classList.add("hidden"); return; }
+
       if (body) body.classList.remove("hidden");
 
       this.renderReality(a);
@@ -419,10 +422,14 @@
       });
     },
 
-    unmount() {
+    destroyCharts() {
       if (this._calChart) { this._calChart.destroy(); this._calChart = null; }
       if (this._fcalChart) { this._fcalChart.destroy(); this._fcalChart = null; }
       if (this._eqChart) { this._eqChart.destroy(); this._eqChart = null; }
+    },
+
+    unmount() {
+      this.destroyCharts();
     },
   };
 
