@@ -147,9 +147,8 @@ def settle_if_resolved(b):
         return False
     payout = b["contracts"] * 1.0 if result == b["side"] else 0.0
     realized = round(payout - b["cost_basis"], 6)
-    db.adjust_balance(b["user_id"], payout)
-    db.resolve_bet(b["id"], "settled", result, round(payout, 6), realized)
-    return True
+    return db.resolve_bet(b["id"], "settled", result, round(payout, 6), realized,
+                          credit_uid=b["user_id"], credit=payout)
 
 
 def current_equity(uid):
@@ -185,8 +184,8 @@ def settle_parlays_if_resolved():
             db.resolve_parlay(p["id"], "settled", 0.0, round(-p["cost_basis"], 6))
         elif all_won:
             payout = round(p["stake"] * p["combined_mult"], 6)
-            db.adjust_balance(p["user_id"], payout)
-            db.resolve_parlay(p["id"], "settled", payout, round(payout - p["cost_basis"], 6))
+            db.resolve_parlay(p["id"], "settled", payout, round(payout - p["cost_basis"], 6),
+                              credit_uid=p["user_id"], credit=payout)
 
 
 # --------------------------------------------------------------------------
@@ -772,8 +771,9 @@ class Handler(BaseHTTPRequestHandler):
         exit_fee = fills.kalshi_fee(b["contracts"], bid or 0.0)
         net = round(proceeds - exit_fee, 6)
         realized = round(net - b["cost_basis"], 6)
-        db.adjust_balance(b["user_id"], net)
-        db.resolve_bet(bet_id, "closed", None, net, realized)
+        if not db.resolve_bet(bet_id, "closed", None, net, realized,
+                              credit_uid=b["user_id"], credit=net):
+            return self._send_json({"error": "no open bet with that id"}, 404)
         self._send_json({"ok": True, "proceeds": net, "realized_pnl": realized,
                          "bet": db.get_bet(bet_id)})
 
@@ -788,8 +788,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({"error": "result must be yes|no"}, 400)
         payout = b["contracts"] * 1.0 if result == b["side"] else 0.0
         realized = round(payout - b["cost_basis"], 6)
-        db.adjust_balance(uid, payout)
-        db.resolve_bet(bet_id, "settled", result, round(payout, 6), realized)
+        if not db.resolve_bet(bet_id, "settled", result, round(payout, 6), realized,
+                              credit_uid=uid, credit=payout):
+            return self._send_json({"error": "no open bet with that id"}, 404)
         self._send_json({"ok": True, "bet": db.get_bet(bet_id)})
 
     def api_settle_all(self):
@@ -857,14 +858,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({"error": "no open parlay with that id"}, 404)
         result = (body.get("result") or "").lower()
         if result == "win":
+            payout = round(p["stake"] * p["combined_mult"], 6)
+            if not db.resolve_parlay(pid, "settled", payout, round(payout - p["cost_basis"], 6),
+                                     credit_uid=uid, credit=payout):
+                return self._send_json({"error": "no open parlay with that id"}, 404)
             for lg in p["legs"]:
                 db.set_leg(lg["id"], "won", lg["side"])
-            payout = round(p["stake"] * p["combined_mult"], 6)
-            db.adjust_balance(uid, payout)
-            db.resolve_parlay(pid, "settled", payout, round(payout - p["cost_basis"], 6))
         elif result == "lose":
+            if not db.resolve_parlay(pid, "settled", 0.0, round(-p["cost_basis"], 6)):
+                return self._send_json({"error": "no open parlay with that id"}, 404)
             db.set_leg(p["legs"][0]["id"], "lost", "no" if p["legs"][0]["side"] == "yes" else "yes")
-            db.resolve_parlay(pid, "settled", 0.0, round(-p["cost_basis"], 6))
         else:
             return self._send_json({"error": "result must be win|lose"}, 400)
         self._send_json({"ok": True, "parlay": db.get_parlay(pid)})

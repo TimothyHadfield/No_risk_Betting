@@ -147,6 +147,17 @@ def _exec(sql, params=()):
         _conn.execute(sql, params)
 
 
+def _exec_count(sql, params=()):
+    """Run a statement (no commit) and return how many rows it changed."""
+    if USE_PG:
+        cur = _conn.cursor()
+        cur.execute(_q(sql), params)
+        n = cur.rowcount
+        cur.close()
+        return n
+    return _conn.execute(sql, params).rowcount
+
+
 def _insert(sql, params=()):
     """Run an INSERT into an auto-id table, commit, return the new row id."""
     if USE_PG:
@@ -795,12 +806,19 @@ def all_open_bets():
 
 
 @_with_retry
-def resolve_bet(bet_id, status, result, payout, realized_pnl):
+def resolve_bet(bet_id, status, result, payout, realized_pnl, credit_uid=None, credit=0.0):
+    """Close an OPEN bet and (optionally) credit its owner, in one transaction.
+    Only the first caller wins: returns False if the bet was no longer open
+    (e.g. the poller and a Sell/Settle request raced), so nothing is paid twice."""
     with _lock:
-        _exec("UPDATE bets SET status = ?, result = ?, payout = ?, realized_pnl = ?, "
-              "closed_at = ? WHERE id = ?",
-              (status, result, payout, realized_pnl, time.time(), bet_id))
+        n = _exec_count("UPDATE bets SET status = ?, result = ?, payout = ?, realized_pnl = ?, "
+                        "closed_at = ? WHERE id = ? AND status = 'open'",
+                        (status, result, payout, realized_pnl, time.time(), bet_id))
+        if n == 1 and credit_uid is not None and credit:
+            _exec("UPDATE accounts SET balance = balance + ? WHERE user_id = ?",
+                  (credit, credit_uid))
         _commit()
+        return n == 1
 
 
 # ---- equity history ------------------------------------------------------
@@ -902,12 +920,17 @@ def set_leg(leg_id, status, result):
 
 
 @_with_retry
-def resolve_parlay(pid, status, payout, realized_pnl):
+def resolve_parlay(pid, status, payout, realized_pnl, credit_uid=None, credit=0.0):
+    """Same once-only close + credit as resolve_bet, for parlays."""
     with _lock:
-        _exec("UPDATE parlays SET status = ?, payout = ?, realized_pnl = ?, "
-              "closed_at = ? WHERE id = ?",
-              (status, payout, realized_pnl, time.time(), pid))
+        n = _exec_count("UPDATE parlays SET status = ?, payout = ?, realized_pnl = ?, "
+                        "closed_at = ? WHERE id = ? AND status = 'open'",
+                        (status, payout, realized_pnl, time.time(), pid))
+        if n == 1 and credit_uid is not None and credit:
+            _exec("UPDATE accounts SET balance = balance + ? WHERE user_id = ?",
+                  (credit, credit_uid))
         _commit()
+        return n == 1
 
 
 # ==========================================================================

@@ -21,7 +21,9 @@ def kalshi_fee(contracts, price):
     if contracts <= 0 or price <= 0 or price >= 1:
         return 0.0
     raw = FEE_RATE * contracts * price * (1.0 - price)
-    return math.ceil(raw * 100.0) / 100.0  # round up to the next cent
+    # round up to the next cent; round() first strips float noise so an exact
+    # cent (e.g. 0.07*100*0.5*0.5 = 1.75) isn't bumped to the next one
+    return math.ceil(round(raw * 100.0, 6)) / 100.0
 
 
 def walk_book(asks, contracts):
