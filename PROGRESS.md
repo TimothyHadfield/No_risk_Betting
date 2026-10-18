@@ -14,6 +14,7 @@ _Measured 2026-09-21: branch `main` clean and even with `origin/main`. Last code
 
 | Area | State | Notes |
 |---|---|---|
+| Home-screen icon | Fixed 2026-10-17 | iPhones ignore an SVG apple-touch-icon, so added `apple-touch-icon.png` (180px, same design as `icon.svg`, square corners) and pointed the link + manifest at it; `sw.js` now `nrb-shell-v43`. |
 | **Public launch / promotion** | **BLOCKED on Tim** | Kalshi's Data Terms restrict public display/redistribution of their market data without written consent. Tim has to ask Kalshi for permission or a data license and review ESPN's terms (ESPN endpoints are unofficial). Claude can't do this. Personal/educational use is fine meanwhile. |
 | Core app (markets, detail, betting w/ honest fills, parlays, predict-then-bet, Forecasting Score, search, light/dark, PWA) | live | Built 2026-06; verified headless/API then (see archive). |
 | Hosting | live | https://no-risk-betting.onrender.com · Render free web service (Dockerfile) + Neon free Postgres. Pushing `main` auto-deploys. |
